@@ -15,7 +15,9 @@ import { Route as ApplyRouteImport } from './routes/apply'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as DataDeletionRouteImport } from './routes/data-deletion'
 import { Route as DiagnosticsRouteImport } from './routes/diagnostics'
+import { Route as FollowerRouteImport } from './routes/follower'
 import { Route as LogoutRouteImport } from './routes/logout'
+import { Route as MarketplaceRouteImport } from './routes/marketplace'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as MerchRouteImport } from './routes/merch'
 import { Route as NftsRouteImport } from './routes/nfts'
@@ -25,8 +27,11 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as RiskDisclosureRouteImport } from './routes/risk-disclosure'
 import { Route as RoadmapRouteImport } from './routes/roadmap'
 import { Route as SocialAuthRouteImport } from './routes/social-auth'
+import { Route as StudioRouteImport } from './routes/studio'
+import { Route as SubscriptionsRouteImport } from './routes/subscriptions'
 import { Route as SupportRouteImport } from './routes/support'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as VerificationRouteImport } from './routes/verification'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as WhitepaperRouteImport } from './routes/whitepaper'
 import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
@@ -59,6 +64,7 @@ import { Route as AuthenticatedTradesRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedWalletRouteImport } from './routes/_authenticated/wallet'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
+import { Route as MarketplaceSlugRouteImport } from './routes/marketplace.$slug'
 import { Route as WelcomeIndexRouteImport } from './routes/welcome.index'
 import { Route as WelcomeAiModelRouteImport } from './routes/welcome.ai-model'
 import { Route as WelcomeBillsRouteImport } from './routes/welcome.bills'
@@ -126,9 +132,19 @@ const DiagnosticsRoute = DiagnosticsRouteImport.update({
   path: '/diagnostics',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FollowerRoute = FollowerRouteImport.update({
+  id: '/follower',
+  path: '/follower',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LogoutRoute = LogoutRouteImport.update({
   id: '/logout',
   path: '/logout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MarketplaceRoute = MarketplaceRouteImport.update({
+  id: '/marketplace',
+  path: '/marketplace',
   getParentRoute: () => rootRouteImport,
 } as any)
 const McpRoute = McpRouteImport.update({
@@ -176,6 +192,16 @@ const SocialAuthRoute = SocialAuthRouteImport.update({
   path: '/social-auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StudioRoute = StudioRouteImport.update({
+  id: '/studio',
+  path: '/studio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SubscriptionsRoute = SubscriptionsRouteImport.update({
+  id: '/subscriptions',
+  path: '/subscriptions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SupportRoute = SupportRouteImport.update({
   id: '/support',
   path: '/support',
@@ -184,6 +210,11 @@ const SupportRoute = SupportRouteImport.update({
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerificationRoute = VerificationRouteImport.update({
+  id: '/verification',
+  path: '/verification',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WelcomeRoute = WelcomeRouteImport.update({
@@ -351,6 +382,11 @@ const InviteTokenRoute = InviteTokenRouteImport.update({
   id: '/invite/$token',
   path: '/invite/$token',
   getParentRoute: () => rootRouteImport,
+} as any)
+const MarketplaceSlugRoute = MarketplaceSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => MarketplaceRoute,
 } as any)
 const WelcomeIndexRoute = WelcomeIndexRouteImport.update({
   id: '/',
@@ -564,7 +600,9 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRouteWithChildren
   '/data-deletion': typeof DataDeletionRoute
   '/diagnostics': typeof DiagnosticsRoute
+  '/follower': typeof FollowerRoute
   '/logout': typeof LogoutRoute
+  '/marketplace': typeof MarketplaceRouteWithChildren
   '/mcp': typeof McpRoute
   '/merch': typeof MerchRoute
   '/nfts': typeof NftsRoute
@@ -574,8 +612,11 @@ export interface FileRoutesByFullPath {
   '/risk-disclosure': typeof RiskDisclosureRoute
   '/roadmap': typeof RoadmapRoute
   '/social-auth': typeof SocialAuthRoute
+  '/studio': typeof StudioRoute
+  '/subscriptions': typeof SubscriptionsRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/verification': typeof VerificationRoute
   '/welcome': typeof WelcomeRouteWithChildren
   '/whitepaper': typeof WhitepaperRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
@@ -608,6 +649,7 @@ export interface FileRoutesByFullPath {
   '/wallet': typeof AuthenticatedWalletRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/marketplace/$slug': typeof MarketplaceSlugRoute
   '/welcome/ai-model': typeof WelcomeAiModelRoute
   '/welcome/bills': typeof WelcomeBillsRoute
   '/welcome/exchange': typeof WelcomeExchangeRoute
@@ -652,7 +694,9 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRouteWithChildren
   '/data-deletion': typeof DataDeletionRoute
   '/diagnostics': typeof DiagnosticsRoute
+  '/follower': typeof FollowerRoute
   '/logout': typeof LogoutRoute
+  '/marketplace': typeof MarketplaceRouteWithChildren
   '/mcp': typeof McpRoute
   '/merch': typeof MerchRoute
   '/nfts': typeof NftsRoute
@@ -662,8 +706,11 @@ export interface FileRoutesByTo {
   '/risk-disclosure': typeof RiskDisclosureRoute
   '/roadmap': typeof RoadmapRoute
   '/social-auth': typeof SocialAuthRoute
+  '/studio': typeof StudioRoute
+  '/subscriptions': typeof SubscriptionsRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/verification': typeof VerificationRoute
   '/whitepaper': typeof WhitepaperRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
@@ -695,6 +742,7 @@ export interface FileRoutesByTo {
   '/wallet': typeof AuthenticatedWalletRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/marketplace/$slug': typeof MarketplaceSlugRoute
   '/welcome/ai-model': typeof WelcomeAiModelRoute
   '/welcome/bills': typeof WelcomeBillsRoute
   '/welcome/exchange': typeof WelcomeExchangeRoute
@@ -741,7 +789,9 @@ export interface FileRoutesById {
   '/auth': typeof AuthRouteWithChildren
   '/data-deletion': typeof DataDeletionRoute
   '/diagnostics': typeof DiagnosticsRoute
+  '/follower': typeof FollowerRoute
   '/logout': typeof LogoutRoute
+  '/marketplace': typeof MarketplaceRouteWithChildren
   '/mcp': typeof McpRoute
   '/merch': typeof MerchRoute
   '/nfts': typeof NftsRoute
@@ -751,8 +801,11 @@ export interface FileRoutesById {
   '/risk-disclosure': typeof RiskDisclosureRoute
   '/roadmap': typeof RoadmapRoute
   '/social-auth': typeof SocialAuthRoute
+  '/studio': typeof StudioRoute
+  '/subscriptions': typeof SubscriptionsRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/verification': typeof VerificationRoute
   '/welcome': typeof WelcomeRouteWithChildren
   '/whitepaper': typeof WhitepaperRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
@@ -785,6 +838,7 @@ export interface FileRoutesById {
   '/_authenticated/wallet': typeof AuthenticatedWalletRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/marketplace/$slug': typeof MarketplaceSlugRoute
   '/welcome/ai-model': typeof WelcomeAiModelRoute
   '/welcome/bills': typeof WelcomeBillsRoute
   '/welcome/exchange': typeof WelcomeExchangeRoute
@@ -831,7 +885,9 @@ export interface FileRouteTypes {
     | '/auth'
     | '/data-deletion'
     | '/diagnostics'
+    | '/follower'
     | '/logout'
+    | '/marketplace'
     | '/mcp'
     | '/merch'
     | '/nfts'
@@ -841,8 +897,11 @@ export interface FileRouteTypes {
     | '/risk-disclosure'
     | '/roadmap'
     | '/social-auth'
+    | '/studio'
+    | '/subscriptions'
     | '/support'
     | '/terms'
+    | '/verification'
     | '/welcome'
     | '/whitepaper'
     | '/.mcp/list-tools'
@@ -875,6 +934,7 @@ export interface FileRouteTypes {
     | '/wallet'
     | '/auth/callback'
     | '/invite/$token'
+    | '/marketplace/$slug'
     | '/welcome/ai-model'
     | '/welcome/bills'
     | '/welcome/exchange'
@@ -919,7 +979,9 @@ export interface FileRouteTypes {
     | '/auth'
     | '/data-deletion'
     | '/diagnostics'
+    | '/follower'
     | '/logout'
+    | '/marketplace'
     | '/mcp'
     | '/merch'
     | '/nfts'
@@ -929,8 +991,11 @@ export interface FileRouteTypes {
     | '/risk-disclosure'
     | '/roadmap'
     | '/social-auth'
+    | '/studio'
+    | '/subscriptions'
     | '/support'
     | '/terms'
+    | '/verification'
     | '/whitepaper'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
@@ -962,6 +1027,7 @@ export interface FileRouteTypes {
     | '/wallet'
     | '/auth/callback'
     | '/invite/$token'
+    | '/marketplace/$slug'
     | '/welcome/ai-model'
     | '/welcome/bills'
     | '/welcome/exchange'
@@ -1007,7 +1073,9 @@ export interface FileRouteTypes {
     | '/auth'
     | '/data-deletion'
     | '/diagnostics'
+    | '/follower'
     | '/logout'
+    | '/marketplace'
     | '/mcp'
     | '/merch'
     | '/nfts'
@@ -1017,8 +1085,11 @@ export interface FileRouteTypes {
     | '/risk-disclosure'
     | '/roadmap'
     | '/social-auth'
+    | '/studio'
+    | '/subscriptions'
     | '/support'
     | '/terms'
+    | '/verification'
     | '/welcome'
     | '/whitepaper'
     | '/.mcp/list-tools'
@@ -1051,6 +1122,7 @@ export interface FileRouteTypes {
     | '/_authenticated/wallet'
     | '/auth/callback'
     | '/invite/$token'
+    | '/marketplace/$slug'
     | '/welcome/ai-model'
     | '/welcome/bills'
     | '/welcome/exchange'
@@ -1097,7 +1169,9 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRouteWithChildren
   DataDeletionRoute: typeof DataDeletionRoute
   DiagnosticsRoute: typeof DiagnosticsRoute
+  FollowerRoute: typeof FollowerRoute
   LogoutRoute: typeof LogoutRoute
+  MarketplaceRoute: typeof MarketplaceRouteWithChildren
   McpRoute: typeof McpRoute
   MerchRoute: typeof MerchRoute
   NftsRoute: typeof NftsRoute
@@ -1107,8 +1181,11 @@ export interface RootRouteChildren {
   RiskDisclosureRoute: typeof RiskDisclosureRoute
   RoadmapRoute: typeof RoadmapRoute
   SocialAuthRoute: typeof SocialAuthRoute
+  StudioRoute: typeof StudioRoute
+  SubscriptionsRoute: typeof SubscriptionsRoute
   SupportRoute: typeof SupportRoute
   TermsRoute: typeof TermsRoute
+  VerificationRoute: typeof VerificationRoute
   WelcomeRoute: typeof WelcomeRouteWithChildren
   WhitepaperRoute: typeof WhitepaperRoute
   Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
@@ -1178,11 +1255,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DiagnosticsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/follower': {
+      id: '/follower'
+      path: '/follower'
+      fullPath: '/follower'
+      preLoaderRoute: typeof FollowerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/logout': {
       id: '/logout'
       path: '/logout'
       fullPath: '/logout'
       preLoaderRoute: typeof LogoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/marketplace': {
+      id: '/marketplace'
+      path: '/marketplace'
+      fullPath: '/marketplace'
+      preLoaderRoute: typeof MarketplaceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mcp': {
@@ -1248,6 +1339,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SocialAuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/studio': {
+      id: '/studio'
+      path: '/studio'
+      fullPath: '/studio'
+      preLoaderRoute: typeof StudioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/subscriptions': {
+      id: '/subscriptions'
+      path: '/subscriptions'
+      fullPath: '/subscriptions'
+      preLoaderRoute: typeof SubscriptionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/support': {
       id: '/support'
       path: '/support'
@@ -1260,6 +1365,13 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verification': {
+      id: '/verification'
+      path: '/verification'
+      fullPath: '/verification'
+      preLoaderRoute: typeof VerificationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/welcome': {
@@ -1485,6 +1597,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/invite/$token'
       preLoaderRoute: typeof InviteTokenRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/marketplace/$slug': {
+      id: '/marketplace/$slug'
+      path: '/$slug'
+      fullPath: '/marketplace/$slug'
+      preLoaderRoute: typeof MarketplaceSlugRouteImport
+      parentRoute: typeof MarketplaceRoute
     }
     '/welcome/': {
       id: '/welcome/'
@@ -1869,6 +1988,18 @@ const AuthRouteChildren: AuthRouteChildren = {
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
+interface MarketplaceRouteChildren {
+  MarketplaceSlugRoute: typeof MarketplaceSlugRoute
+}
+
+const MarketplaceRouteChildren: MarketplaceRouteChildren = {
+  MarketplaceSlugRoute: MarketplaceSlugRoute,
+}
+
+const MarketplaceRouteWithChildren = MarketplaceRoute._addFileChildren(
+  MarketplaceRouteChildren,
+)
+
 interface WelcomeRouteChildren {
   WelcomeAiModelRoute: typeof WelcomeAiModelRoute
   WelcomeBillsRoute: typeof WelcomeBillsRoute
@@ -1905,7 +2036,9 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRouteWithChildren,
   DataDeletionRoute: DataDeletionRoute,
   DiagnosticsRoute: DiagnosticsRoute,
+  FollowerRoute: FollowerRoute,
   LogoutRoute: LogoutRoute,
+  MarketplaceRoute: MarketplaceRouteWithChildren,
   McpRoute: McpRoute,
   MerchRoute: MerchRoute,
   NftsRoute: NftsRoute,
@@ -1915,8 +2048,11 @@ const rootRouteChildren: RootRouteChildren = {
   RiskDisclosureRoute: RiskDisclosureRoute,
   RoadmapRoute: RoadmapRoute,
   SocialAuthRoute: SocialAuthRoute,
+  StudioRoute: StudioRoute,
+  SubscriptionsRoute: SubscriptionsRoute,
   SupportRoute: SupportRoute,
   TermsRoute: TermsRoute,
+  VerificationRoute: VerificationRoute,
   WelcomeRoute: WelcomeRouteWithChildren,
   WhitepaperRoute: WhitepaperRoute,
   Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
