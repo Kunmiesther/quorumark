@@ -1,0 +1,46 @@
+import {readFile,readdir} from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import {PGlite} from '@electric-sql/pglite';
+const db=new PGlite(),owner='00000000-0000-4000-8000-000000000001',connection='00000000-0000-4000-8000-000000000002',wallet='00000000-0000-4000-8000-000000000003',strategy='00000000-0000-4000-8000-000000000004';
+let checks=0;const q=(sql,args=[])=>db.query(sql,args);
+const policy={marginUsdc:'125',sessionBudgetUsdc:'125',lossLimitUsdc:'25',takeProfitBps:100,maxDailyEntries:20,acceptMonitoredExits:true};
+const proof=()=>({operator:'0x'+'44'.repeat(20),safe:'0x'+'22'.repeat(20),module:'0x'+'33'.repeat(20),block:'123',block_hash:'0x'+'aa'.repeat(32),observed_at:new Date().toISOString()});
+const activate=(p=policy,b=proof(),u=owner)=>q('select public.activate_synfutures_policy($1,$2,$3,$4) as activated',[u,connection,p,b]);
+const reject=async(p,code)=>{await assert.rejects(p,new RegExp(code));checks++;};
+try{
+ await db.exec(`create role anon;create role authenticated;create role service_role;
+ create table exchange_connections(id uuid primary key,user_id uuid,exchange text,environment text,status text,is_live boolean,permission_trade boolean,permissions_verified boolean,permission_verified_at timestamptz,last_verified_at timestamptz,permission_scopes jsonb,last_error text,last_error_code text,last_error_message text);
+ create table wallet_connections(id uuid primary key,user_id uuid,status text,is_active boolean);
+ create table synfutures_account_registrations(id uuid primary key,user_id uuid,wallet_id uuid,safe_address text,module_address text);
+ create table synfutures_campaigns(user_id uuid,connection_id uuid,status text);
+ create table synfutures_transactions(user_id uuid,connection_id uuid,state text);
+ create table user_strategy(user_id uuid,connection_id uuid,symbol text,strategy_id uuid,market_type text,cross_margin boolean,mode text,enabled boolean,params jsonb,margin_mode text,updated_at timestamptz default now(),primary key(user_id,connection_id,symbol));
+ create table autopilot_workflows(id uuid primary key default gen_random_uuid(),user_id uuid,strategy_id uuid,goal_id text,goal_label text,name text,authorized_capital numeric,loss_limit numeric,target_days int,risk_mode text,status text,proposal jsonb,approved_at timestamptz,connection_id uuid,symbols text[],enabled_turtles text[],max_daily_entries int,max_open_positions int,timezone text,schedule_enabled boolean default true,created_at timestamptz default now(),updated_at timestamptz default now(),constraint autopilot_workflows_symbols_check check(cardinality(symbols) between 1 and 4 and symbols <@ array['BTC-USDT','ETH-USDT','SOL-USDT','XRP-USDT']));
+ create function public.has_role(uuid,text) returns boolean language sql as $$select $1='${owner}'::uuid and $2='admin'$$;
+ insert into exchange_connections(id,user_id,exchange,environment,status,is_live,permission_trade,permissions_verified,permission_scopes) values('${connection}','${owner}','synfutures','mainnet','verified',false,false,false,'{"registration_id":"${connection}"}');
+ insert into wallet_connections values('${wallet}','${owner}','verified',true);
+ insert into synfutures_account_registrations values('${connection}','${owner}','${wallet}','${proof().safe}','${proof().module}');
+ insert into user_strategy(user_id,connection_id,symbol,strategy_id,market_type,cross_margin,mode,enabled,params) values('${owner}','${connection}','BTC-USDT','${strategy}','futures',true,'paper',false,'{}');`);
+ const dir=new URL('../supabase/migrations/',import.meta.url),files=await readdir(dir);
+ const path=process.argv[2]??(files.find(f=>f.endsWith('_synfutures_owner_activation.sql'))?new URL(files.find(f=>f.endsWith('_synfutures_owner_activation.sql')),dir):new URL('../supabase/pending/synfutures_owner_activation.sql',import.meta.url));
+ await db.exec(await readFile(path,'utf8'));
+ await reject(activate(policy,{...proof(),observed_at:'2020-01-01'}),'ACTIVATION_INVALID');
+ await reject(activate({...policy,acceptMonitoredExits:false}),'ACTIVATION_INVALID');
+ await reject(activate({...policy,marginUsdc:'126'}),'ACTIVATION_INVALID');
+ await reject(activate({...policy,takeProfitBps:null}),'ACTIVATION_INVALID');
+ await reject(activate(policy,{...proof(),operator:null}),'ACTIVATION_INVALID');
+ await reject(activate(policy,proof(),'00000000-0000-4000-8000-000000000099'),'OWNER_REQUIRED');
+ await q("insert into synfutures_transactions values($1,$2,'unknown')",[owner,connection]);await reject(activate(),'IN_FLIGHT');await q('delete from synfutures_transactions');
+ await q("insert into synfutures_campaigns values($1,$2,'waiting')",[owner,connection]);await reject(activate(),'IN_FLIGHT');await q('delete from synfutures_campaigns');
+ assert.equal((await q('select is_live from exchange_connections')).rows[0].is_live,false);checks++;
+ assert.equal((await activate()).rows[0].activated,true);checks++;
+ const workflow=(await q('select * from autopilot_workflows')).rows[0];assert.deepEqual(workflow.symbols,['BTC-USDC','ETH-USDC']);checks++;
+ const rows=(await q('select * from user_strategy order by symbol')).rows;assert.equal(rows.length,3);assert.equal(rows.find(r=>r.symbol==='BTC-USDT').mode,'paper');checks++;
+ for(const row of rows.filter(r=>r.symbol.endsWith('USDC'))){assert.equal(row.enabled,true);assert.equal(row.params.margin_usdc,'125');assert.equal(row.params.leverage,33);assert.equal(row.params.native_take_profit_bps,100);assert.equal(row.params.autopilot_workflow_id,workflow.id);checks++;}
+ assert.equal((await q('select is_live and permission_trade and permissions_verified as ready from exchange_connections')).rows[0].ready,true);checks++;
+ await activate();assert.equal((await q('select count(*) as count from autopilot_workflows')).rows[0].count,1);assert.equal(String((await q('select approved_at from autopilot_workflows')).rows[0].approved_at),String(workflow.approved_at));checks++;
+ const privileges=(await q("select has_function_privilege('anon','public.activate_synfutures_policy(uuid,uuid,jsonb,jsonb)','EXECUTE') as anon,has_function_privilege('authenticated','public.activate_synfutures_policy(uuid,uuid,jsonb,jsonb)','EXECUTE') as auth,has_function_privilege('service_role','public.activate_synfutures_policy(uuid,uuid,jsonb,jsonb)','EXECUTE') as service")).rows[0];assert.deepEqual(privileges,{anon:false,auth:false,service:true});checks++;
+ await q("insert into autopilot_workflows(symbols) values('{BTC-USDT,ETH-USDT,SOL-USDT,XRP-USDT}')");checks++;
+ await reject(q("insert into autopilot_workflows(symbols) values('{BTC-USDT,BTC-USDC}')"),'symbols_check');
+ console.log(`SynFutures owner activation: ${checks} scenarios passed`);
+}finally{await db.close();}

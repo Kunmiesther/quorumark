@@ -1,0 +1,56 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+.output
+.vinxi
+.tanstack/**
+.nitro
+*.local
+
+# Wrangler / Cloudflare
+.wrangler/
+.dev.vars
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment files (never commit real secrets; use .env.example for names)
+.env
+.env.*
+!.env.example
+
+# WireGuard runtime material (private keys and generated peer configs)
+infra/aster-egress/config/
+infra/aster-egress/state/
+
+# Python caches
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Local replay evidence is reproducible and can exceed 500 MB.
+backtest_artifacts/
+
+# Supabase CLI local link and runtime metadata
+supabase/.temp/
+.vercel
+.env*

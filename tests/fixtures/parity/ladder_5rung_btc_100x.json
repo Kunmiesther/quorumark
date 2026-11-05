@@ -1,0 +1,15 @@
+{
+  "description": "Five-rung 100x BTC legacy reconstruction fallback. New campaign margin is 5% of destination-wallet settled balance and is tested separately.",
+  "symbol": "BTC-USDT",
+  "direction": "long",
+  "entry": 100.0,
+  "leverage": 100,
+  "expected": {
+    "total_margin_usd": 60,
+    "rungs": 5,
+    "per_rung_margin_usd": 12,
+    "rung_tp_pct": 0.01,
+    "span_pct": 0.01,
+    "hard_stop_beyond_last_rung_pct": 0.01
+  }
+}

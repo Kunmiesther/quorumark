@@ -1,0 +1,19 @@
+name: Autonomous worker verification
+on:
+  pull_request:
+    paths: ['*.py', 'shared/**', 'tests/**', '.github/workflows/worker-ci.yml']
+  push:
+    paths: ['*.py', 'shared/**', 'tests/**', '.github/workflows/worker-ci.yml']
+permissions:
+  contents: read
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pytest==9.1.1 requests==2.34.2 supabase==2.32.0 python-dotenv==1.2.4
+      - run: PYTHONPATH=. python -m pytest tests/test_autonomous_workflow_consistency.py tests/test_strategy_ownership.py tests/test_worker_signal.py tests/test_decision_pipeline.py tests/test_decision_reducer.py tests/test_aster_worker_routing.py tests/test_worker_live_wiring.py tests/test_synfutures_worker.py tests/test_synfutures_market_data.py -q
+

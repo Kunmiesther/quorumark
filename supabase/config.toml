@@ -1,0 +1,71 @@
+project_id = "sthdmulczzebfcmihhca"
+
+# Wallet verification authenticates the caller inside each function with
+# admin.auth.getUser(access_token). Keeping the legacy gateway JWT check off
+# avoids rejecting current asymmetric Supabase access tokens before the
+# function's own ownership check runs.
+[functions.wallet-challenge]
+verify_jwt = false
+
+[functions.wallet-verify]
+verify_jwt = false
+
+[functions.wallet-balances]
+verify_jwt = false
+
+# Owner/admin-only public-data venue lab. It verifies the caller with
+# admin.auth.getUser so current asymmetric Supabase access tokens work.
+[functions.venue-readiness]
+verify_jwt = false
+
+[functions.wallet-manage]
+verify_jwt = false
+
+# Authenticated ApeX same-account capital coordinator. The function validates
+# the caller with admin.auth.getUser and never accepts an external destination.
+[functions.apex-capital-flow]
+verify_jwt = false
+
+# Authenticated, irreversible self-service account deletion for Apple and
+# Google Play compliance. The function independently verifies the caller and
+# can only delete that caller's Auth user.
+[functions.delete-account]
+verify_jwt = true
+
+# Execution Broker — the ONLY edge function permitted to submit real orders.
+# Requires BROKER_SIGNING_SECRET (shared HMAC secret with the Railway worker)
+# to be set in Project Settings → Secrets. If missing, the function rejects
+# every intent with a clear error.
+[functions.execution-broker]
+verify_jwt = false
+
+# Authenticated one-tap trigger that mints a proof token and forwards a single
+# testnet_proof intent to execution-broker. Requires BROKER_SIGNING_SECRET.
+[functions.run-testnet-proof]
+verify_jwt = true
+
+# Authenticated one-tap trigger that mints a proof token and forwards a single
+# live_proof intent to execution-broker (ApeX Omni mainnet). Requires
+# BROKER_SIGNING_SECRET. This does NOT arm autonomous execution; it fires
+# exactly one deliberate order per confirmation.
+[functions.run-live-proof]
+verify_jwt = true
+
+# Narrow privileged path for the Railway TurtleBot worker. Authentication is
+# HMAC-SHA256 with WORKER_INGEST_SHARED_SECRET (separate from every other
+# app secret). JWT verification is disabled because the worker is not a
+# Supabase user; the function itself enforces auth, replay protection,
+# operation allowlist, and rate limits.
+[functions.worker-ingest]
+verify_jwt = false
+
+# Read-only ApeX position reconciler. Invoked by pg_cron every minute with
+# just the apikey header (no user JWT), so verify_jwt must be false.
+[functions.reconcile-live-positions]
+verify_jwt = false
+
+# Read-only ApeX fills poller + FIFO matcher. Vercel's authenticated
+# live-fills cron invokes this with its service-role JWT; the function also
+# checks that the bearer token equals its service-role secret.
+[functions.ingest-live-fills]
+verify_jwt = true

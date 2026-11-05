@@ -1,0 +1,15 @@
+# ApeX Omni signer service — top-level dependencies.
+# Pinned to Python 3.11.
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic==2.9.2
+cryptography==43.0.3
+requests==2.32.3
+
+# Official ApeX Omni SDK, pinned by immutable commit SHA. This is the
+# ONLY source of Omni order signing + zkLink derivation. Do not float.
+apexomni @ git+https://github.com/ApeX-Protocol/apexpro-openapi.git@4d849dd84087b9551afaa55d5f37068f7ce0a103
+
+# Envelope-encryption and Supabase interop.
+supabase==2.9.1
+python-dotenv==1.0.1

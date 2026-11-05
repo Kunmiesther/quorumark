@@ -1,0 +1,7 @@
+{
+  "name": "turtlebot-synfutures-contract-tests",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": { "test": "forge test" },
+  "devDependencies": { "@safe-global/safe-contracts": "1.4.1" }
+}

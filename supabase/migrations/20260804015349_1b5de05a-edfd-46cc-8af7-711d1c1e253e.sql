@@ -1,0 +1,1 @@
+ALTER TABLE public.committee_cycles ADD COLUMN IF NOT EXISTS geometry_version text;

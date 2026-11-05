@@ -1,0 +1,56 @@
+# Railway deployment manifest — TurtleBot execution path.
+#
+# Two services live in the same Railway project so the signer stays on
+# `*.railway.internal` and is NEVER assigned a public domain.
+#
+# Owner actions in the dashboard:
+#   1. Create both services from this repo, selecting the correct Dockerfile path.
+#   2. Attach a public domain to `turtlebot-broker` only.
+#   3. DO NOT attach a public domain to `turtlebot-signer`.
+#   4. Set `readOnlyRootFilesystem: true` and add a tmpfs mount at /tmp for both.
+#   5. Populate secrets per signer/OWNER_RUNBOOK.md (Group A) and
+#      broker environment matrix in broker/README.md.
+#
+# Real secrets are NEVER committed here.
+
+[[services]]
+name = "turtlebot-broker"
+source = "."
+dockerfile = "broker/Dockerfile"
+
+  [services.deploy]
+  startCommand = "node dist/server.js"
+  healthcheckPath = "/healthz"
+  healthcheckTimeout = 10
+  restartPolicyType = "ON_FAILURE"
+  restartPolicyMaxRetries = 5
+  numReplicas = 1
+
+  [services.resources]
+  memoryMB = 512
+  cpuMillicores = 500
+
+  # Public — Railway assigns a public HTTPS domain to this service.
+  [services.network]
+  public = true
+
+[[services]]
+name = "turtlebot-signer"
+source = "."
+dockerfile = "signer/Dockerfile"
+
+  [services.deploy]
+  healthcheckPath = "/healthz"
+  healthcheckTimeout = 10
+  restartPolicyType = "ON_FAILURE"
+  restartPolicyMaxRetries = 5
+  numReplicas = 1
+
+  [services.resources]
+  memoryMB = 512
+  cpuMillicores = 500
+
+  # Private — reachable only over Railway private networking.
+  # DO NOT enable a public domain for this service.
+  [services.network]
+  public = false

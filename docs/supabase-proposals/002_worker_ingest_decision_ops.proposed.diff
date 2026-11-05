@@ -1,0 +1,254 @@
+diff --git a/supabase/functions/worker-ingest/index.ts b/supabase/functions/worker-ingest/index.ts
+index 853a71a..1e6fd9b 100644
+--- a/supabase/functions/worker-ingest/index.ts
++++ b/supabase/functions/worker-ingest/index.ts
+@@ -48,6 +48,14 @@ const ALLOWED_OPS = new Set([
+   // that compares paper decisions to (future) live decisions.
+   "GUARDIAN_RECENT_CLOSES_READ",
+   "SHADOW_LEDGER_INSERT",
++  // Canonical deterministic decision ledger. UPSERT records one immutable
++  // decision per completed candle (including WAIT) and always returns the
++  // STORED execution state, which is what makes duplicate submission
++  // impossible across worker restarts and redeploys. EXECUTION_UPDATE moves
++  // that state FORWARD ONLY. Neither op signs, decrypts, reaches an
++  // exchange, or touches a credential.
++  "DECISION_UPSERT",
++  "DECISION_EXECUTION_UPDATE",
+   // Proof-of-life trigger channel. CLAIM atomically consumes ONE pending
+   // owner-issued command (worker_commands, admin-only inserts via RLS).
+   // COMPLETE reports the outcome back to that row. Neither op signs, decrypts,
+@@ -149,8 +157,15 @@ const ALLOWED_EVENT_CODES = new Set([
+   // Canonical candidate identity for a naturally detected setup. Observational:
+   // it records WHAT was detected, never authorizes anything. Mirrored into
+   // public.strategy_candidates (service-role only write).
++  // HISTORICAL: the live worker no longer emits this — it records one
++  // decision per completed candle instead. The code stays allowlisted so the
++  // existing rows keep a valid event vocabulary.
+   // Must stay in lockstep with worker_ingest_client.py.
+   "STRATEGY_CANDIDATE_CREATED",
++  // Human-readable trail for one canonical decision, including WAIT. The
++  // durable row is written by DECISION_UPSERT; this event is the narrative.
++  // Must stay in lockstep with worker_ingest_client.py.
++  "STRATEGY_DECISION",
+ ]);
+ 
+ 
+@@ -183,6 +198,12 @@ const RATE_LIMITS: Record<string, { perMinute: number }> = {
+   // one batch per cycle. Both are bounded even under aggressive cycle rates.
+   GUARDIAN_RECENT_CLOSES_READ: { perMinute: 30 },
+   SHADOW_LEDGER_INSERT: { perMinute: 60 },
++  // One decision per completed candle per live symbol, retried by the 15s
++  // cycle until it sticks: ~4 writes/min/symbol at the candle boundary plus
++  // idempotent repeats. Execution updates fire at most 3x per traded
++  // decision (blocked | intent_created -> terminal).
++  DECISION_UPSERT: { perMinute: 120 },
++  DECISION_EXECUTION_UPDATE: { perMinute: 120 },
+   // Signer DB proxy ops. Credential lookup + halted check fire once per
+   // /v1/orders call; audit inserts fire a few times per intent. Generous
+   // but bounded — the worker cycle and canary clamps are the real limits.
+@@ -343,6 +364,8 @@ Deno.serve(async (req) => {
+     if (op === "GUARDIAN_DIRECTIVE_UPSERT") return await handleGuardianDirectiveUpsert(admin, payload, correlationId);
+     if (op === "GUARDIAN_RECENT_CLOSES_READ") return await handleGuardianRecentClosesRead(admin, workerId, payload, correlationId);
+     if (op === "SHADOW_LEDGER_INSERT") return await handleShadowLedgerInsert(admin, payload, correlationId);
++    if (op === "DECISION_UPSERT") return await handleDecisionUpsert(admin, payload, correlationId);
++    if (op === "DECISION_EXECUTION_UPDATE") return await handleDecisionExecutionUpdate(admin, payload, correlationId);
+     if (op === "WORKER_COMMAND_CLAIM") return await handleWorkerCommandClaim(admin, workerId, payload, correlationId);
+     if (op === "WORKER_COMMAND_COMPLETE") return await handleWorkerCommandComplete(admin, payload, correlationId);
+     if (op === "APEX_CREDENTIAL_FIND_ACTIVE") return await handleApexCredentialFindActive(admin, payload, correlationId);
+@@ -984,6 +1007,196 @@ async function handleGuardianRecentClosesRead(
+   );
+ }
+ 
++// ---------------------------------------------------------------------------
++// DECISION_UPSERT — record ONE canonical deterministic decision.
++//
++// IDEMPOTENT BY CONSTRUCTION. `decision_id` is the primary key and is a pure
++// function of (connection_id, symbol, candle_close_at), which is also a
++// unique index. Concurrent retries therefore collapse onto one row: the
++// first write wins and stays immutable, and every later caller receives that
++// stored row back.
++//
++// The response ALWAYS carries the STORED `execution_state`. That is the
++// durable duplicate-submission guard — a worker that restarts mid-candle
++// learns from the server that the decision was already acted on, which an
++// in-memory set could never tell it.
++//
++// This op signs nothing, decrypts nothing, reads no credential and reaches no
++// exchange. It writes exactly one table.
++// ---------------------------------------------------------------------------
++const DECISION_DIRECTIONS = new Set(["long", "short", "wait"]);
++const DECISION_ID_RE = /^dec_v1_[0-9a-f]{32}$/;
++
++// Monotonic execution ranks. A transition to a rank at or below the stored
++// one is IGNORED, so a late retry can never downgrade a recorded ApeX result.
++const EXECUTION_RANK: Record<string, number> = {
++  not_reached: 0,
++  blocked: 10,
++  intent_created: 20,
++  submitted: 30,
++  ambiguous: 35,
++  rejected: 40,
++  filled: 50,
++};
++
++async function handleDecisionUpsert(
++  admin: ReturnType<typeof createClient>,
++  payload: Record<string, unknown>,
++  correlationId: string,
++): Promise<Response> {
++  const d = (payload.decision && typeof payload.decision === "object")
++    ? payload.decision as Record<string, unknown>
++    : null;
++  if (!d) return jsonError(400, "BAD_DECISION", correlationId);
++
++  const decisionId = typeof d.decision_id === "string" ? d.decision_id : "";
++  const userId = typeof d.user_id === "string" ? d.user_id : "";
++  const connectionId = typeof d.connection_id === "string" ? d.connection_id : "";
++  const symbol = typeof d.symbol === "string" ? d.symbol.slice(0, 32) : "";
++  const direction = String(d.direction ?? "");
++  const reasonCode = typeof d.reason_code === "string" ? d.reason_code.slice(0, 48) : "";
++  const candleCloseAt = typeof d.candle_close_at === "string" ? d.candle_close_at : "";
++  const evidenceHash = typeof d.evidence_hash === "string" ? d.evidence_hash.slice(0, 128) : "";
++
++  if (!DECISION_ID_RE.test(decisionId)) return jsonError(400, "BAD_DECISION_ID", correlationId);
++  if (!UUID_RE.test(userId)) return jsonError(400, "BAD_DECISION_USER", correlationId);
++  if (!UUID_RE.test(connectionId)) return jsonError(400, "BAD_DECISION_CONNECTION", correlationId);
++  if (!symbol) return jsonError(400, "BAD_DECISION_SYMBOL", correlationId);
++  if (!DECISION_DIRECTIONS.has(direction)) return jsonError(400, "BAD_DECISION_DIRECTION", correlationId);
++  if (!reasonCode) return jsonError(400, "BAD_DECISION_REASON", correlationId);
++  if (!candleCloseAt || Number.isNaN(Date.parse(candleCloseAt))) {
++    return jsonError(400, "BAD_DECISION_CANDLE", correlationId);
++  }
++  if (!evidenceHash) return jsonError(400, "BAD_DECISION_EVIDENCE", correlationId);
++
++  const takeProfits = Array.isArray(d.take_profits)
++    ? d.take_profits.filter((x) => typeof x === "number" && Number.isFinite(x)).slice(0, 12)
++    : [];
++  const entryZone =
++    d.entry_zone && typeof d.entry_zone === "object" &&
++    typeof (d.entry_zone as Record<string, unknown>).low === "number" &&
++    typeof (d.entry_zone as Record<string, unknown>).high === "number"
++      ? d.entry_zone
++      : null;
++
++  const row = {
++    decision_id: decisionId,
++    user_id: userId,
++    connection_id: connectionId,
++    symbol,
++    strategy: String(d.strategy ?? "unknown").slice(0, 32),
++    armed_leg: typeof d.armed_leg === "string" ? d.armed_leg.slice(0, 32) : null,
++    timeframe: "5m",
++    candle_close_at: new Date(candleCloseAt).toISOString(),
++    direction,
++    reason_code: reasonCode,
++    reason: typeof d.reason === "string" ? d.reason.slice(0, 200) : "",
++    entry_zone: entryZone,
++    invalidation: typeof d.invalidation === "number" ? d.invalidation : null,
++    take_profits: takeProfits,
++    evidence: d.evidence && typeof d.evidence === "object" ? d.evidence : {},
++    evidence_hash: evidenceHash,
++    schema_version: String(d.schema_version ?? "decision.v1").slice(0, 32),
++    created_at: typeof d.created_at === "string" ? d.created_at : new Date().toISOString(),
++  };
++
++  // ignoreDuplicates: the FIRST decision for a candle is the decision. A
++  // replay must never rewrite direction, reason, or geometry.
++  const { error: upsertErr } = await admin
++    .from("strategy_decisions")
++    .upsert(row, { onConflict: "decision_id", ignoreDuplicates: true });
++  if (upsertErr) return jsonError(500, "DECISION_UPSERT_FAILED", correlationId);
++
++  // Always read back: the caller needs the STORED state, which after a
++  // duplicate is the prior row's, not the one just offered.
++  const { data: stored, error: readErr } = await admin
++    .from("strategy_decisions")
++    .select("decision_id, execution_state, direction, reason_code")
++    .eq("decision_id", decisionId)
++    .maybeSingle();
++  if (readErr || !stored) return jsonError(500, "DECISION_READBACK_FAILED", correlationId);
++
++  return new Response(
++    JSON.stringify({
++      ok: true,
++      decision_id: stored.decision_id,
++      execution_state: stored.execution_state ?? "not_reached",
++      stored_direction: stored.direction,
++      stored_reason_code: stored.reason_code,
++      correlation_id: correlationId,
++    }),
++    { status: 200, headers: { "content-type": "application/json" } },
++  );
++}
++
++// ---------------------------------------------------------------------------
++// DECISION_EXECUTION_UPDATE — move ONE decision's execution record FORWARD.
++//
++// The decision itself is immutable and no column of it is writable here. Only
++// the execution columns move, and only to a strictly higher rank, so an
++// out-of-order retry cannot turn a recorded rejection back into "in flight".
++// ---------------------------------------------------------------------------
++async function handleDecisionExecutionUpdate(
++  admin: ReturnType<typeof createClient>,
++  payload: Record<string, unknown>,
++  correlationId: string,
++): Promise<Response> {
++  const decisionId = typeof payload.decision_id === "string" ? payload.decision_id : "";
++  const state = String(payload.execution_state ?? "");
++  if (!DECISION_ID_RE.test(decisionId)) return jsonError(400, "BAD_DECISION_ID", correlationId);
++  if (!(state in EXECUTION_RANK)) return jsonError(400, "BAD_EXECUTION_STATE", correlationId);
++
++  const { data: current, error: readErr } = await admin
++    .from("strategy_decisions")
++    .select("execution_state")
++    .eq("decision_id", decisionId)
++    .maybeSingle();
++  if (readErr || !current) return jsonError(404, "DECISION_NOT_FOUND", correlationId);
++
++  const currentRank = EXECUTION_RANK[String(current.execution_state ?? "not_reached")] ?? 0;
++  if (EXECUTION_RANK[state] <= currentRank) {
++    return new Response(
++      JSON.stringify({
++        ok: true, applied: false, execution_state: current.execution_state,
++        correlation_id: correlationId,
++      }),
++      { status: 200, headers: { "content-type": "application/json" } },
++    );
++  }
++
++  const patch: Record<string, unknown> = {
++    execution_state: state,
++    execution_updated_at: new Date().toISOString(),
++  };
++  if (typeof payload.reason_code === "string") {
++    patch.execution_reason_code = payload.reason_code.slice(0, 64);
++  }
++  for (const [field, column] of [
++    ["safety", "safety_checks"],
++    ["intent", "order_intent"],
++    ["apex_result", "apex_result"],
++  ] as const) {
++    const value = payload[field];
++    if (value && typeof value === "object") {
++      const json = JSON.stringify(value);
++      if (json.length > MAX_METADATA_BYTES) return jsonError(413, "DETAIL_TOO_LARGE", correlationId);
++      if (containsSecretPattern(json)) return jsonError(400, "SECRET_PATTERN_REJECTED", correlationId);
++      patch[column] = value;
++    }
++  }
++
++  const { error: updErr } = await admin
++    .from("strategy_decisions")
++    .update(patch)
++    .eq("decision_id", decisionId);
++  if (updErr) return jsonError(500, "DECISION_UPDATE_FAILED", correlationId);
++
++  return new Response(
++    JSON.stringify({ ok: true, applied: true, execution_state: state, correlation_id: correlationId }),
++    { status: 200, headers: { "content-type": "application/json" } },
++  );
++}
++
+ // ---------------------------------------------------------------------------
+ // SHADOW_LEDGER_INSERT — persist a batch of paper (and, once live activates,
+ // live) decision rows into paper_live_shadow_ledger. Row shape from the

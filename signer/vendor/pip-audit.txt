@@ -1,0 +1,12 @@
+Found 5 known vulnerabilities in 3 packages
+Name       Version ID              Fix Versions
+---------- ------- --------------- ------------
+ecdsa      0.16.0  PYSEC-2026-1325
+ecdsa      0.16.0  PYSEC-2026-2467 0.19.2
+mpmath     1.0.0   PYSEC-2021-427  1.3.0
+mpmath     1.0.0   PYSEC-2021-427  1.3.0
+setuptools 80.10.2 PYSEC-2026-3447 83.0.0
+
+Name     Skip Reason
+-------- -----------------------------------------------------------------------
+apexomni Dependency not found on PyPI and could not be audited: apexomni (3.4.0)

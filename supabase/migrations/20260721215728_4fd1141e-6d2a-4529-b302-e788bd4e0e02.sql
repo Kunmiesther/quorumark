@@ -1,0 +1,1 @@
+SELECT cron.unschedule('paper-tick-every-minute');

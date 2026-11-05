@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public._bootstrap_paper_tick_secret(text);

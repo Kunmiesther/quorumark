@@ -1,0 +1,39 @@
+{
+  "$schema_version": 1,
+  "$description": "Canonical TurtleBot Zen liquidity-sweep contract. Every symbol in the scan universe is eligible. Paper, live, UI, backtests, and documentation must consume or validate against this file; local numeric overrides are prohibited.",
+  "strategy_id": "zen_sweep_v1",
+  "eligible_symbols_source": "orchestration.scan_symbols",
+  "signal": {
+    "entry_timeframe_min": 15,
+    "closed_candles_only": true,
+    "alignment_timeframes_min": [60, 240, 1440],
+    "alignment_votes_required": 2
+  },
+  "campaign": {
+    "one_active_per_symbol_per_wallet": true,
+    "ai_entry_authority": "none"
+  },
+  "execution": {
+    "margin_mode": "cross",
+    "rung_count": 5,
+    "rung_spacing_price_pct": 0.005,
+    "arm_all_rungs_on_acceptance": true,
+    "total_margin_fraction_of_available_equity": 0.05,
+    "leverage_policy": "freeze_at_campaign_start_capped_by_venue"
+  },
+  "exit": {
+    "roi_basis": "net_campaign_pnl_divided_by_initial_margin",
+    "costs_included": ["entry_fee", "exit_fee", "funding", "slippage"],
+    "first_target_margin_roi_pct": 100,
+    "first_close_fraction": 0.5,
+    "final_target_margin_roi_pct": 200,
+    "trailing_activates_margin_roi_pct": 100,
+    "initial_trailing_floor_margin_roi_pct": 50,
+    "trailing_gap_margin_roi_pct": 50,
+    "partial_exit_allocation": "pro_rata_across_open_lots"
+  },
+  "risk": {
+    "structural_emergency_stop_after_first_fill": true,
+    "fail_closed_if_cross_margin_unavailable": true
+  }
+}

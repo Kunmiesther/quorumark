@@ -1,0 +1,50 @@
+{
+  "input": {
+    "connection_id": "11111111-2222-3333-4444-555555555555",
+    "symbol": "BTC-USDT",
+    "strategy": "accumulator",
+    "candle_close_ms": 1753920000000,
+    "direction": "long",
+    "reason_code": "LONG_CONFIRMED",
+    "reason": "LONG confirmed on the newest 5m candle (accumulator)",
+    "evidence": {
+      "strategy": "accumulator",
+      "candle_close_ms": 1753920000000,
+      "regime": "trend",
+      "trend_age_candles": 7,
+      "guard_authorized": true,
+      "guard_block_code": null,
+      "directions": {
+        "long": {
+          "confirmed": true,
+          "confirmation_ref": "break:1753919700000|retest:1753920000000",
+          "break_ts_ms": 1753919700000,
+          "retest_ts_ms": 1753920000000,
+          "stop_pct": 0.0125
+        },
+        "short": {
+          "confirmed": false,
+          "confirmation_ref": ""
+        }
+      }
+    },
+    "created_at_ms": 1753920012000,
+    "entry_zone": {
+      "low": 63120.0,
+      "high": 63260.0
+    },
+    "invalidation": 62950.0,
+    "take_profits": [
+      64500.5,
+      64700.0,
+      65000.25
+    ]
+  },
+  "expected": {
+    "decision_id": "dec_v1_ee05573764436466a80009aab4baa2a7",
+    "evidence_hash": "97f02b6ff863a18702df168db6299a61ba9746a681d6550537738b6b8a8b6e87",
+    "canonical_evidence": "{\"candle_close_ms\":1753920000000,\"directions\":{\"long\":{\"break_ts_ms\":1753919700000,\"confirmation_ref\":\"break:1753919700000|retest:1753920000000\",\"confirmed\":true,\"retest_ts_ms\":1753920000000,\"stop_pct\":0.0125},\"short\":{\"confirmation_ref\":\"\",\"confirmed\":false}},\"guard_authorized\":true,\"guard_block_code\":null,\"regime\":\"trend\",\"strategy\":\"accumulator\",\"trend_age_candles\":7}",
+    "candle_close_at": "2025-07-31T00:00:00Z",
+    "created_at": "2025-07-31T00:00:12Z"
+  }
+}

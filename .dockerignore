@@ -1,0 +1,28 @@
+# Exclude from Railway/Nixpacks and Docker build contexts.
+# Prevents any .env from being baked into images.
+.env
+.env.*
+!.env.example
+
+.git
+.gitignore
+node_modules
+dist
+dist-ssr
+.output
+.tanstack
+.nitro
+.wrangler
+.dev.vars
+
+# Local dev / editor
+.vscode
+.idea
+.DS_Store
+*.log
+
+# Tests / caches
+__pycache__
+*.pyc
+.pytest_cache
+coverage

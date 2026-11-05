@@ -1,0 +1,1 @@
+UPDATE public.paper_wallets SET trades_count = 0, wins_count = 0, losses_count = 0, realized_pnl = 0, balance = 3600;

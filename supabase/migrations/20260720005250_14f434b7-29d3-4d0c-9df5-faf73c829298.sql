@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.ensure_paper_wallets(uuid) FROM PUBLIC, anon, authenticated;

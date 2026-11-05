@@ -1,0 +1,76 @@
+# AUTHORITATIVE compatibility gate for the signer container.
+#
+# The signer's lockfile pins Python 3.11 and the zkLink native bindings are
+# compiled artifacts. A pass on any other interpreter is SECONDARY EVIDENCE
+# ONLY and must not be treated as a green signer. This workflow is the source
+# of truth: it installs from the hashed lockfile with --require-hashes, so a
+# floating or substituted dependency is a hard build failure.
+name: signer-ci
+
+on:
+  push:
+    paths: ["signer/**", ".github/workflows/signer-ci.yml"]
+  pull_request:
+    paths: ["signer/**", ".github/workflows/signer-ci.yml"]
+  workflow_dispatch:
+
+jobs:
+  signer-python311:
+    name: signer tests (Python 3.11 — authoritative)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"   # matches signer/requirements.lock. Do not float.
+
+      - name: Verify interpreter is 3.11
+        run: |
+          python -c "import sys; assert sys.version_info[:2]==(3,11), sys.version; print(sys.version)"
+
+      - name: Install hashed dependencies and pinned ApeX SDK separately
+        working-directory: signer
+        run: |
+          python -m pip install -U pip
+          # pip --require-hashes rejects VCS dependencies (no artifact hash possible).
+          # Split the lockfile: install everything else under hash enforcement, then
+          # install the pinned ApeX commit separately with --no-deps. The commit SHA
+          # itself is the integrity pin for that one package.
+          python - <<'EOF'
+          from pathlib import Path
+
+          source = Path("requirements.lock").read_text().splitlines(keepends=True)
+          matches = [line for line in source if "apexomni @ git+" in line]
+          assert len(matches) == 1, f"expected one apexomni VCS line, found {len(matches)}"
+          Path("/tmp/requirements-hashed.lock").write_text(
+              "".join(line for line in source if "apexomni @ git+" not in line)
+          )
+          EOF
+          python -m pip install --require-hashes -r /tmp/requirements-hashed.lock
+          python -m pip install --no-deps "apexomni @ git+https://github.com/ApeX-Protocol/apexpro-openapi.git@4d849dd84087b9551afaa55d5f37068f7ce0a103"
+
+
+      - name: Verify pinned SDK commit
+        working-directory: signer
+        run: |
+          python - <<'EOF'
+          import re, pathlib
+          pin = "4d849dd84087b9551afaa55d5f37068f7ce0a103"
+          src = pathlib.Path("requirements.in").read_text()
+          assert pin in src, "requirements.in no longer pins the reviewed SDK commit"
+          from apexomni import zklink_sdk as sdk
+          for n in ("ZkLinkSigner", "ContractBuilder", "Contract", "get_public_key_hash"):
+              assert hasattr(sdk, n), f"zkLink binding missing: {n}"
+          print("pinned SDK + zkLink native bindings OK")
+          EOF
+
+      - name: Install test runner (pytest + anyio)
+        working-directory: signer
+        run: python -m pip install pytest==8.3.3 anyio==4.6.2.post1
+
+      - name: Signer test suite
+        working-directory: signer
+        run: PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests/ -p anyio -q
+

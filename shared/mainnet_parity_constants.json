@@ -1,0 +1,288 @@
+{
+  "$schema_version": 1,
+  "$description": "Single source of truth for numeric thresholds and enum contracts shared by the paper engine (TypeScript) and the live worker/broker/signer (Python). Consumed by src/lib/paper/parityConstants.ts and shared/parity_constants.py. Do NOT introduce a duplicate literal on either side for any field defined here \u2014 add or edit the value in this file and both sides pick it up. See docs/MAINNET_PARITY.md \u00a72 for source-of-truth designations and \u00a77 for known value discrepancies.",
+  "orchestration": {
+    "$description": "One portfolio clock and four-wallet contract. Exactly BTC, XRP, SOL, and ETH are scanned. Every enabled strategy evaluates every scanned symbol; symbols are never hard-coded to strategies. A 2-of-3 1h/4h/1d alignment routes mechanically to Long or Short. Failed alignment routes Council -> Onyx and only an approval executes DCA in Strategy. Council and Onyx are stages, not wallets. Hedge protects an opposite open core campaign. At most one active campaign per symbol per role wallet may run. Held positions are supervised every 5m, and entries/rotations are decided only on completed 15m candles.",
+    "scan_symbols": ["BTC-USDT", "XRP-USDT", "SOL-USDT", "ETH-USDT"],
+    "scan_universe_size": 4,
+    "wallet_roles": ["long", "short", "hedge", "strategy"],
+    "core_alignment_timeframes_min": [60, 240, 1440],
+    "core_alignment_votes_required": 2,
+    "failed_alignment_route": ["council", "onyx", "strategy_dca"],
+    "ai_selection_requires_symbol_flat": true,
+    "campaign_margin_fraction_of_settled_wallet_balance": 0.05,
+    "campaign_rung_count": 5,
+    "campaign_sizing_basis": "destination_wallet_settled_balance_at_campaign_creation",
+    "campaign_sizing_cap": "venue_and_available_collateral",
+    "max_active_opportunities": 4,
+    "health_interval_min": 5,
+    "decision_interval_min": 15
+  },
+  "accumulator": {
+    "atr_period": 14,
+    "ema_period": 15,
+    "pivot_left": 2,
+    "pivot_right": 2,
+    "lookback_candles": 48,
+    "retest_window": 6,
+    "zone_atr_mult": 0.05
+  },
+  "hunter": {
+    "atr_period": 14,
+    "atr_sma_period": 20,
+    "pivot_left": 2,
+    "pivot_right": 2,
+    "k_threshold": 1.3,
+    "retrace_window": 25
+  },
+  "sniper": {
+    "$description_profile": "Sniper is the counter-trend / mean-reversion leg armed in neutral regimes. Because chop pays small and reverts, the ladder is intentionally SHALLOW (max_rungs) and the TP is a VOLATILITY-SCALED near target (tp_atr_mult \u00d7 ATR(atr_period) from the CURRENT avg entry). tp_min_net_pct is a floor on |tp - avg_entry| / avg_entry so a win can never be a fee donation on very low-vol symbols. Promotion (htf_promotion) still applies \u2014 early TP is the default exit, promotion is the exception path. Both paper (TS) and live (Python) MUST load these constants from this block.",
+    "max_rungs": 2,
+    "tp_atr_mult": 1.0,
+    "tp_min_net_pct": 0.0015,
+    "atr_period": 14,
+    "zone_atr_mult": 0.25,
+    "pivot_left": 2,
+    "pivot_right": 2,
+    "ema_period": 50,
+    "slope_lookback": 20,
+    "flat_pct": 0.01,
+    "zone_lookback_hours": 72,
+    "max_wick_atr_mult": 1.5,
+    "fallback_r": 2.0,
+    "cont_body_frac": 0.4,
+    "cont_min_atr_mult": 0.15
+  },
+  "sweep": {
+    "$description": "H2 MID-WEIGHTED PYRAMID SWEEP-DCA (owner-ratified 2026-07-27, replaces single-entry momentum-hold sweep). Detection unchanged: 1h sweep + 4h HTF alignment hard gate. Deployment: ladder of 3 limit rungs across a flush zone extending flush_zone_atr \u00d7 ATR(1h) beyond the swept level. Fill depths [level_touch, mid_zone, zone_edge] at fill_depth_fracs of the zone; margin split via fill_weights (sixths). One hard stop at zone_edge + stop_beyond_edge_atr \u00d7 ATR(1h); all filled units exit together on stop. Exits: scaled TP tiers off avg entry (recomputed on each fill) at rr multiples of R=|avgEntry\u2212stop|; remainder at hard stop or timeout_bars_1h. Cross-portfolio concurrency cap = max_concurrent_ladders (deploying + open counted). Guardian v2 catastrophic-only (no double-management of tier ladder). Re-entry lockout applies on stop-out. Life Map allocates realized P&L on EACH partial close. Both paper (TS: src/lib/paper/sweepH2.ts) and live (Python: sweep_h2.py) MUST load these constants from this block. Detection stays in src/lib/paper/sweep.ts + sweep_signal.py; only sizing/exit changed.",
+    "enabled": true,
+    "enable_retest": true,
+    "enable_rejection": true,
+    "max_retest_candles": 10,
+    "body_ratio": 0.3,
+    "swing_lookback": 20,
+    "min_atr_mult": 1.0,
+    "atr_period": 14,
+    "atr_sma_period": 14,
+    "rsi_period": 14,
+    "rsi_long_max": 65,
+    "rsi_short_min": 35,
+    "session_hours_utc": [0, 8, 16],
+    "entry_tf": "1h",
+    "momentum_tf": "4h",
+    "$h2_geometry": "Three fill depths across the flush zone (0.0=level_touch, 0.5=mid_zone, 1.0=zone_edge). Weights in sixths => [1,3,2]/6 of total leg margin.",
+    "fill_depth_fracs": [0.0, 0.5, 1.0],
+    "fill_weights": [1, 3, 2],
+    "flush_zone_atr": 1.0,
+    "stop_beyond_edge_atr": 0.25,
+    "$tp_tiers": "R = |avg_entry - stop|. Tiers close `frac` of current total qty at avg_entry \u00b1 rr\u00d7R (direction-signed). Sequence 50/30/20 at 1.75/2.0/2.5R.",
+    "tp_tiers": [
+      {"frac": 0.5, "rr": 1.75, "label": "SWEEP TP1"},
+      {"frac": 0.3, "rr": 2.0,  "label": "SWEEP TP2"},
+      {"frac": 0.2, "rr": 2.5,  "label": "SWEEP TP3"}
+    ],
+    "timeout_bars_1h": 48,
+    "htf_alignment_required": true,
+    "max_concurrent_ladders": 2,
+    "$transitional_legacy_fields": "The fields below are RETAINED for the transitional window while engine.ts / bot_worker.py still call the single-entry / momentum-hold sweep code paths. Once the H2 pyramid ladder is wired into both orchestrators (follow-up PR), remove them along with sweepMomentum.ts and the single-shot branch in engine.ts. Do NOT read these from new code — use sweepH2.ts / sweep_h2.py instead.",
+    "max_rungs": 1,
+    "tp_rr": 2.5,
+    "momentum_ema_len": 9,
+    "breakeven_on_1h_confirm": true
+  },
+  "eligibility": {
+    "$note": "Paper (TS) and live (Python) use DIFFERENT semantics \u2014 see MAINNET_PARITY.md \u00a77. The paper engine uses a lookback window; the live worker uses strict identity (newest-candle only). Both values are pinned here so future parity work can converge them under an owner ruling. Neither side is refactored to change behavior in DEBT-01.",
+    "entry_freshness_candles_ts_paper": 3,
+    "entry_freshness_candles_py_live": 1
+  },
+  "bos_significance": {
+    "$description": "A break of structure is CONFIRMED only when the candle CLOSE exceeds the broken swing level by at least min_displacement_atr \u00d7 ATR(atr_period) on that timeframe. Sub-threshold pokes are noise: no adverse-BOS exit, no BOS-based entry signal, no HTF BOS state change. Applied at the shared primitive level so every consumer (5m entry break detection, 5m adverse-BOS guardian, 1h HTF BOS detector) inherits the same filter.",
+    "atr_period": 14,
+    "min_displacement_atr": 0.25
+  },
+  "entry_lockout": {
+    "$description": "Post-guardian-BOS re-entry lockout. After a scout_bos / scout_guardian_bos / scout_guardian_cluster close, both paper AND live block new entries on the SAME (symbol, direction) for this many 5m candles. Live-side consumer: bot_worker.py entry gate via reentry_lockout.py.",
+    "reentry_lockout_candles": 12
+  },
+  "htf_promotion": {
+    "$description": "HTF Guardian Exploit Mode \u2014 when an OPEN position is profitable (net PnL > 0 after fees) AND the 1h BOS state is confirmed in the position's direction, promote to 'runner'. Owner ruling (Phase 3 amendment): bank_fraction = 0 \u2014 NO position reduction on promotion. Atomic promotion actions: (1) hard stop to breakeven+fees on the FULL position, (2) cancel fixed TP, (3) cancel unfilled rungs. Post-promotion the 5m adverse-BOS guardian no longer cuts the position; exit is confirmed adverse 1h BOS OR the breakeven stop \u2014 promoted trades can never realize a net loss. bank_fraction is retained as a configurable so a partial-bank variant can be re-enabled by data without a code change. Live worker consumes via htf_bos.py + promotion directives.",
+    "enabled": true,
+    "bank_fraction": 0,
+    "min_net_profit_mode": "breakeven_plus_fees"
+  },
+  "ladder": {
+    "eight_rung_canonical_symbols": [
+      "BTC-USDT"
+    ],
+    "ladder_strategies": [
+      "accumulator",
+      "dca"
+    ],
+    "dca_total_margin_usd": 60,
+    "dca_rungs_min": 5,
+    "dca_rungs_max": 5,
+    "dca_rungs_default": 5,
+    "exit_rungs_min": 2,
+    "exit_rungs_max": 12,
+    "exit_rungs_default": 4,
+    "$exit_rungs_note": "Owner ruling #18. Entry rungs COMMIT margin and are bounded by pilot allocation rules (dca_rungs_min/max). Exit rungs only RELEASE exposure and carry no margin commitment, so they use a separate, wider clamp. Manual exit ladder planner (build_exit_ladder_plan) reads exit_rungs_* from here only \u2014 no duplicate literals.",
+    "dca_rung_tp_pct": 0.01,
+    "ladder_span_roi": 1.0,
+    "ladder_span_pct_cap": 0.02,
+    "hard_stop_beyond_last_rung_pct": 0.01,
+    "ladder_contract_version": 1,
+    "$live_side_note": "accumulator_exit.py encodes TP as margin-ROI percentages (TP1=200 %, TP2=300 %, TP3=400 %) which convert to per-rung price moves of (pct/100)/leverage. At 100x, TP1 (+200 % margin) = +2 % price \u2014 DISTINCT from the paper engine's per-rung +1 % price TP (dca_rung_tp_pct). See MAINNET_PARITY.md \u00a77."
+
+  },
+  "tp_geometry": {
+    "min_structural_tp_distance_pct": 0.0025,
+    "min_tp_to_stop_distance_ratio": 2.0
+  },
+  "risk": {
+    "max_loss_margin_frac": 0.5,
+    "$note": "Predicate: margin > 0 && -unrealized_worst >= margin * max_loss_margin_frac. Consumed by TS shouldTriggerMaxLoss AND Python max_loss.should_trigger_max_loss (DEBT-02 closed via LIVE-READINESS pass)."
+  },
+  "onyx": {
+    "bank_profit_margin_roi_pct": 30,
+    "$note": "Only consulted when ONYX_AI_ENABLED is true. Dormant in current paper engine. Live-side mirror is DEBT-07."
+  },
+  "guardian": {
+    "$description": "DEPRECATED \u2014 superseded by guardian_v2. Kept for one release so any straggling reader does not crash. Do NOT add new consumers.",
+    "rung_cancel_pct": 0.01,
+    "cluster_min_positions": 3,
+    "cluster_drawdown_pct": 0.02,
+    "rules_version": 1,
+    "$authoritative_side": "python (scout_guardian.py) \u2014 deprecated"
+  },
+  "guardian_v2": {
+    "$description": "Position-aware Guardian v2 (owner-ratified rewrite). Every verdict is a gated function of the position's context: strategy leg, age in candles, promoted flag, pair_id, unrealized P&L, pending rungs. Same directive contract as v1 (scout_guardian_directives types/reasons unchanged); new brain, same mouth. Consumes bos_significance for the SIGNIFICANT gate \u2014 never re-implements it. Authoritative side: Python (scout_guardian.py).",
+    "grace_candles": 2,
+    "stale_data_cycles": 3,
+    "rung_cancel_atr_mult": 0.6,
+    "rung_cancel_floor_pct": 0.01,
+    "cluster_drawdown_atr_mult": 1.2,
+    "cluster_floor_pct": 0.02,
+    "cluster_min_positions": 3,
+    "sniper_max_adverse_pct": 0.03,
+    "rules_version": 2,
+    "$authoritative_side": "python (scout_guardian.py)"
+  },
+  "regime_routing": {
+    "$description": "Within regime='trend', route by trend_age (candles since regime committed to 'trend' via classifyRegimeSeries hysteresis). Fresh trend (age <= trend_fresh_max_candles) \u2192 vanguard (single decisive break+retest entry). Aged trend \u2192 accumulator (laddered break-and-retest). neutral \u2192 sniper, high_vol \u2192 hunter, null \u2192 nobody. Live-side mirror: routing.py::leg_for_regime + regime.py::classify_regime (LIVE-READINESS pass).",
+    "trend_fresh_max_candles": 24,
+    "$sweep_leg_note": "Neutral regime routes to \"sweep\" leg (was \"sniper\"). Turtle identity/DB label stays \"sniper\" for continuity."
+  },
+  "regime_classifier": {
+    "$description": "Regime-classifier thresholds (shared by TS classifyRegime and Python classify_regime). ADX+ER+ATR% with hysteresis and confirmation delay.",
+    "adx_period": 14,
+    "er_window": 20,
+    "adx_enter": 25,
+    "adx_exit": 20,
+    "er_enter": 0.3,
+    "vol_enter_atr_pct": 0.011,
+    "vol_exit_atr_pct": 0.009,
+    "confirm_candles": 3
+  },
+  "vanguard": {
+    "enabled": true,
+    "stop_buffer_frac": 0.0005
+  },
+  "arbiter": {
+    "$description": "Arbiter v2 (see prior docs).",
+    "enabled": false,
+    "min_funding_rate": 0.0003,
+    "funding_interval_hours": 8,
+    "min_net_apr": 0.08,
+    "exit_apr": 0.03,
+    "max_basis_pct": 0.02,
+    "max_concurrent_pairs": 2,
+    "rotation_hysteresis_pct": 0.25,
+    "base_allocation_frac": 0.1,
+    "max_allocation_frac": 0.25,
+    "vol_filter_atr_pct_decile": 0.9,
+    "leg_imbalance_tolerance_frac": 0.02
+  },
+  "spread_arb": {
+    "enabled": false,
+    "min_net_bps": 20,
+    "exit_bps": 5,
+    "max_hold_candles": 24
+  },
+  "venues": {
+    "apex_perp": {
+      "taker_bps": 5,
+      "maker_bps": 2,
+      "est_slippage_bps": 2
+    },
+    "kraken_spot": {
+      "taker_bps": 26,
+      "maker_bps": 16,
+      "est_slippage_bps": 5
+    },
+    "synthetic_spot": {
+      "taker_bps": 10,
+      "maker_bps": 5,
+      "est_slippage_bps": 3,
+      "basis_offset_bps": 0
+    }
+  },
+  "pilot": {
+    "$description": "Owner-ratified pilot funding rule for the first live activation. Working allocation per activation cycle = clamp(equity - allocation_reserve_floor_usd, 0, allocation_ceiling_usd). The reserve floor NEVER goes on-desk. Leverage is CAPPED at max_leverage regardless of venue cap or symbol config \u2014 the broker translator MUST clamp effective leverage to this value. Consumed by broker translator (pilot_sizing.ts) and worker sizing helper (pilot_sizing.py). Both sides load from this same block.",
+    "allocation_reserve_floor_usd": 100,
+    "allocation_ceiling_usd": 500,
+    "max_leverage": 100
+  },
+  "stop_verification": {
+    "$description": "Exchange-side stop reconciliation: every worker cycle, for every open live position, a resting reduce-only stop order must exist at ApeX at or tighter than the intended stop level. Missing / drifted looser \u2192 emit a repair directive (broker re-places the stop) and log a loud STOP_MISSING_REPAIRED event. In paper mode (paper_simulate=true) the worker still runs the check and emits STOP_VERIFY_OK / STOP_VERIFY_WOULD_REPAIR telemetry so the code path is exercised before live. tolerance_pct is the fractional band within which the exchange stop is considered 'at intended level' (5 bps default). min_check_interval_sec throttles per-position rechecks.",
+    "tolerance_pct": 0.0005,
+    "min_check_interval_sec": 30,
+    "paper_simulate": true
+  },
+  "shadow_mode": {
+    "$description": "Live/Paper shadow-mode surface. When live activates, the paper engine keeps running the same signals in parallel and each live decision is compared to what paper would have done (fill vs skip, price delta, PnL delta). Rows land in the paper_live_shadow_ledger table and surface on /shadow. compare_price_tolerance_bps: divergences under this band are marked 'in_line'; over \u2192 'divergent' with a reason code.",
+    "enabled": true,
+    "compare_price_tolerance_bps": 20
+  },
+  "enums": {
+    "legs": [
+      "hunter",
+      "accumulator",
+      "sniper",
+      "dca",
+      "scout",
+      "vanguard",
+      "arbiter"
+    ],
+    "regimes": [
+      "trend",
+      "neutral",
+      "high_vol",
+      "reversal_forming",
+      "opposing_to_open_position"
+    ],
+    "directive_types": [
+      "cancel_unfilled_rungs",
+      "close_position",
+      "promote_runner",
+      "cancel_fixed_tp",
+      "set_breakeven_stop",
+      "repair_stop"
+    ],
+    "guardian_reason_codes": [
+      "scout_guardian_bos",
+      "scout_guardian_cluster",
+      "scout_guardian_ladder_underwater",
+      "max_loss_cap",
+      "htf_bos_exit",
+      "runner_breakeven_stop",
+      "stop_missing_repaired"
+    ],
+    "exit_reasons_protected": [
+      "kill_switch",
+      "liquidation",
+      "manual",
+      "account_guard",
+      "scout_bos"
+    ]
+  }
+}
