@@ -8,7 +8,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useEffect } from "react";
 import { getPublicBackendEnvMessage, waitForPublicBackendEnv } from "@/lib/public-env";
 import { detectBrowserEnv, inAppBrowserMessage } from "@/lib/auth/mobileOAuth";
-import { ProgressDots } from "@/components/welcome/ProgressDots";
 import { QuorumarkLogo } from "@/components/brand/QuorumarkLogo";
 
 export const Route = createFileRoute("/auth")({
@@ -30,7 +29,7 @@ const schema = z.object({
 function AuthPage() {
   const navigate = useNavigate();
   const { session, loading } = useAuth();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -58,21 +57,33 @@ function AuthPage() {
       toast.error(getPublicBackendEnvMessage(env.missing));
       return;
     }
-    const parsed = schema.safeParse({ email, password });
+    const parsed = (mode === "forgot" ? schema.pick({ email: true }) : schema).safeParse({
+      email,
+      password,
+    });
     if (!parsed.success) {
       toast.error(parsed.error.issues[0]?.message ?? "Check your details");
       return;
     }
+    const parsedEmail = parsed.data.email;
+    const parsedPassword = "password" in parsed.data ? parsed.data.password : "";
     if (mode === "signup" && !consent) {
       toast.error("Please accept the Terms, Privacy Policy and Risk Disclosure first.");
       return;
     }
     setBusy(true);
     try {
-      if (mode === "signup") {
+      if (mode === "forgot") {
+        const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+          redirectTo: `${window.location.origin}/auth`,
+        });
+        if (error) throw error;
+        toast.success("If an account exists for that email, a reset link is on its way.");
+        setMode("signin");
+      } else if (mode === "signup") {
         const { data, error } = await supabase.auth.signUp({
-          email: parsed.data.email,
-          password: parsed.data.password,
+          email: parsedEmail,
+          password: parsedPassword,
           options: { emailRedirectTo: window.location.origin },
         });
         if (error) throw error;
@@ -84,8 +95,8 @@ function AuthPage() {
         }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
-          email: parsed.data.email,
-          password: parsed.data.password,
+          email: parsedEmail,
+          password: parsedPassword,
         });
         if (error) throw error;
         if (!data.session) {
@@ -156,17 +167,21 @@ function AuthPage() {
   return (
     <main className="q-auth-shell auth-shell welcome-shell mx-auto flex min-h-[100dvh] w-full max-w-[430px] flex-col overflow-x-hidden px-5 pb-12 pt-5">
       <QuorumarkLogo className="mt-4" />
-      <ProgressDots step={0} total={9} />
-      <div className="mb-8 mt-8 flex w-full justify-center">
-        <QuorumarkLogo compact />
+      <div className="q-auth-heading">
+        <p className="q-auth-kicker">Decision control room</p>
+        <h2 className="text-2xl font-semibold tracking-tight">
+          {mode === "signin"
+            ? "Welcome back"
+            : mode === "signup"
+              ? "Create your account"
+              : "Reset your password"}
+        </h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {mode === "forgot"
+            ? "Enter your email and we will send a secure password reset link."
+            : "Review financial decisions with explicit policies and an auditable agent council."}
+        </p>
       </div>
-
-      <h2 className="text-2xl font-semibold tracking-tight">
-        {mode === "signin" ? "Welcome back" : "Create your account"}
-      </h2>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Review financial decisions with explicit policies and an auditable agent council.
-      </p>
 
       {inAppNotice && (
         <div
@@ -177,27 +192,31 @@ function AuthPage() {
         </div>
       )}
 
-      <div className="mt-8 grid w-full grid-cols-1 gap-2">
-        <button
-          onClick={handleGoogle}
-          disabled={busy || oauthPending !== null}
-          aria-busy={oauthPending === "google"}
-          className="welcome-neo-button flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border text-[12px] font-medium text-white disabled:opacity-50"
-        >
-          {oauthPending === "google" ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <GoogleIcon />
-          )}
-          {oauthPending === "google" ? "Opening…" : "Google"}
-        </button>
-      </div>
+      {mode !== "forgot" && (
+        <div className="mt-8 grid w-full grid-cols-1 gap-2">
+          <button
+            onClick={handleGoogle}
+            disabled={busy || oauthPending !== null}
+            aria-busy={oauthPending === "google"}
+            className="welcome-neo-button flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border text-[12px] font-medium text-white disabled:opacity-50"
+          >
+            {oauthPending === "google" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <GoogleIcon />
+            )}
+            {oauthPending === "google" ? "Opening…" : "Google"}
+          </button>
+        </div>
+      )}
 
-      <div className="my-6 flex items-center gap-3 text-[11px] uppercase tracking-wider text-muted-foreground">
-        <div className="h-px flex-1 bg-border" />
-        or email
-        <div className="h-px flex-1 bg-border" />
-      </div>
+      {mode !== "forgot" && (
+        <div className="my-6 flex items-center gap-3 text-[11px] uppercase tracking-wider text-muted-foreground">
+          <div className="h-px flex-1 bg-border" />
+          or email
+          <div className="h-px flex-1 bg-border" />
+        </div>
+      )}
 
       <form onSubmit={handleEmail} className="space-y-3">
         <input
@@ -209,15 +228,17 @@ function AuthPage() {
           onChange={(e) => setEmail(e.target.value)}
           className="h-12 w-full rounded-xl border border-border bg-surface px-4 text-sm outline-none transition placeholder:text-muted-foreground focus:border-primary/60 focus:ring-2 focus:ring-primary/30"
         />
-        <input
-          type="password"
-          required
-          autoComplete={mode === "signup" ? "new-password" : "current-password"}
-          placeholder="Password (min 8 characters)"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="h-12 w-full rounded-xl border border-border bg-surface px-4 text-sm outline-none transition placeholder:text-muted-foreground focus:border-primary/60 focus:ring-2 focus:ring-primary/30"
-        />
+        {mode !== "forgot" && (
+          <input
+            type="password"
+            required
+            autoComplete={mode === "signup" ? "new-password" : "current-password"}
+            placeholder="Password (min 8 characters)"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="h-12 w-full rounded-xl border border-border bg-surface px-4 text-sm outline-none transition placeholder:text-muted-foreground focus:border-primary/60 focus:ring-2 focus:ring-primary/30"
+          />
+        )}
         {mode === "signup" && (
           <label className="flex items-start gap-2 pt-1 text-[12px] leading-relaxed text-muted-foreground">
             <input
@@ -228,15 +249,15 @@ function AuthPage() {
             />
             <span>
               I am 18 or older and I agree to the{" "}
-              <Link to="/terms" className="text-primary hover:underline">
+              <Link to="/terms" className="q-auth-link hover:underline">
                 Terms of Service
               </Link>
               ,{" "}
-              <Link to="/privacy" className="text-primary hover:underline">
+              <Link to="/privacy" className="q-auth-link hover:underline">
                 Privacy Policy
               </Link>{" "}
               and{" "}
-              <Link to="/risk-disclosure" className="text-primary hover:underline">
+              <Link to="/risk-disclosure" className="q-auth-link hover:underline">
                 Risk Disclosure
               </Link>
               .
@@ -249,21 +270,32 @@ function AuthPage() {
           className="welcome-primary-action flex h-14 w-full items-center justify-center gap-2 text-[12px] font-semibold text-white disabled:opacity-60"
         >
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-          {mode === "signin" ? "Sign in" : "Create account"}
+          {mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Send reset link"}
         </button>
       </form>
 
+      {mode === "signin" && (
+        <button
+          type="button"
+          onClick={() => setMode("forgot")}
+          className="q-auth-link mt-4 text-left text-sm"
+        >
+          Forgot password?
+        </button>
+      )}
+
       <button
+        type="button"
         onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
         className="auth-mode-toggle mt-6 rounded-2xl py-3 text-center text-sm text-muted-foreground transition hover:text-foreground"
       >
         {mode === "signin" ? (
           <>
-            New here? <span className="text-primary">Create an account</span>
+            New here? <span className="q-auth-link">Create an account</span>
           </>
         ) : (
           <>
-            Already have an account? <span className="text-primary">Sign in</span>
+            Already have an account? <span className="q-auth-link">Sign in</span>
           </>
         )}
       </button>
@@ -281,9 +313,6 @@ function AuthPage() {
         </Link>
         <Link to="/data-deletion" className="hover:text-foreground">
           Data Deletion
-        </Link>
-        <Link to="/social-auth" className="hover:text-foreground">
-          Social Login
         </Link>
         <Link to="/support" className="hover:text-foreground">
           Support
