@@ -205,7 +205,7 @@ function WelcomeIndex() {
           </div>
         )}
 
-        <div className="col-span-2 mt-4 flex flex-wrap items-center justify-center gap-2">
+        <div className="hidden" aria-hidden="true">
           {[
             {
               name: "TurtleBot on Facebook",
