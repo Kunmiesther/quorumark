@@ -8,6 +8,7 @@ declare module "lucide-react" {
   export const Check: ComponentType<LucideProps>;
   export const CircleAlert: ComponentType<LucideProps>;
   export const ExternalLink: ComponentType<LucideProps>;
+  export const Filter: ComponentType<LucideProps>;
   export const LockKeyhole: ComponentType<LucideProps>;
   export const Loader2: ComponentType<LucideProps>;
   export const Menu: ComponentType<LucideProps>;
@@ -15,6 +16,7 @@ declare module "lucide-react" {
   export const Pause: ComponentType<LucideProps>;
   export const Play: ComponentType<LucideProps>;
   export const ShieldCheck: ComponentType<LucideProps>;
+  export const Search: ComponentType<LucideProps>;
   export const Sparkles: ComponentType<LucideProps>;
   export const Wallet: ComponentType<LucideProps>;
   export const WalletCards: ComponentType<LucideProps>;
