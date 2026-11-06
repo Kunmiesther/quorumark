@@ -4,7 +4,8 @@ import { ArrowRight, Check, CircleAlert, ExternalLink, LockKeyhole, Pause, Play,
 import { toast } from "sonner";
 import { connectProvider, listProviders, signChallenge, type WalletProviderId } from "@/lib/wallet/providers";
 import { supabase } from "@/integrations/supabase/client";
-import { evaluateSignal, executePaper, loadExchangeState, recomputePerformance, runReferenceBacktest, saveExchangeState, type RiskPolicy, type Strategy } from "@/lib/strategy-exchange";
+import { PUBLIC_PYTHON_BACKEND_URL } from "@/lib/public-env";
+import { evaluateSignal, executePaper, loadExchangeState, recomputePerformance, saveExchangeState, type Metrics, type RiskPolicy, type Strategy } from "@/lib/strategy-exchange";
 
 export type ExchangeView = "marketplace" | "detail" | "studio" | "follower" | "subscriptions" | "verification";
 const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -48,4 +49,39 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
   </Shell>;
 }
 
-function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }) { const [metrics, setMetrics] = useState(strategy.metrics); const [name, setName] = useState(""); return <section><button className="q-back" onClick={onBack}>← Back to exchange</button><div className="q-page-heading"><div><p className="q-kicker">Strategy studio</p><h1>Publish a method, not a promise</h1><p>Build a versioned reference strategy and attach evidence before it can be discovered.</p></div><span className="q-status"><i/> Sandbox only</span></div><div className="q-studio-grid"><div className="q-panel q-form"><label>Strategy name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Atlas mean reversion"/></label><label>Trading thesis<textarea defaultValue="A deterministic reference strategy with explicit entries, exits, and volatility based sizing."/></label><div className="q-form-row"><label>Assets<input defaultValue="BTC, ETH"/></label><label>Review cadence<input defaultValue="4 hour"/></label></div><button className="q-primary" onClick={() => setMetrics(runReferenceBacktest())}>Run identifiable backtest <Play size={16}/></button></div><div className="q-panel"><div className="q-card-top"><h2>{metrics === strategy.metrics ? "Reference backtest" : "Backtest complete"}</h2><span>48 deterministic candles</span></div><Chart values={metrics.equity}/><div className="q-metric-grid"><Metric label="Return" value={`+${metrics.returnPct}%`} tone="positive"/><Metric label="Drawdown" value={`${metrics.drawdownPct}%`}/><Metric label="Trades" value={String(metrics.trades)}/><Metric label="Costs" value={`$${fmt(metrics.costs)}`}/></div><div className="q-notice"><ShieldCheck size={16}/> Publish will create a new immutable version. Results remain labeled backtested.</div></div></div></section>; }
+function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }) {
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function runBacktest() {
+    if (!PUBLIC_PYTHON_BACKEND_URL) {
+      setError("Python strategy engine is not configured. Set VITE_PYTHON_BACKEND_URL and start the backend.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const candles = Array.from({ length: 48 }, (_, index) => {
+      const close = 68_000 * (1 + Math.sin(index * 0.71) * 0.012 + index * 0.001);
+      return { timestamp: new Date(Date.UTC(2026, 0, 1, index)).toISOString(), open: close * 0.999, high: close * 1.004, low: close * 0.996, close };
+    });
+    try {
+      const response = await fetch(`${PUBLIC_PYTHON_BACKEND_URL.replace(/\/$/, "")}/v1/backtests/reference`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ candles, strategy: { fast_window: 3, slow_window: 8, initial_cash: 10_000, allocation_pct: 25, fee_bps: 10 } }),
+      });
+      if (!response.ok) throw new Error(`Python engine returned HTTP ${response.status}`);
+      const result = await response.json();
+      setMetrics({ returnPct: result.performance.return_pct, winRate: result.performance.win_rate_pct, drawdownPct: result.performance.max_drawdown_pct, trades: result.performance.trade_count, costs: result.performance.fees, equity: result.equity_curve });
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "The Python strategy engine could not be reached.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const displayedMetrics = metrics ?? strategy.metrics;
+  return <section><button className="q-back" onClick={onBack}>← Back to exchange</button><div className="q-page-heading"><div><p className="q-kicker">Strategy studio</p><h1>Publish a method, not a promise</h1><p>Configure a reference strategy, send historical candles to the Python engine, and inspect returned evidence.</p></div><span className="q-status"><i/> Sandbox only</span></div><div className="q-studio-grid"><div className="q-panel q-form"><label>Strategy name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Atlas mean reversion"/></label><label>Trading thesis<textarea defaultValue="A deterministic reference strategy with explicit entries, exits, and volatility based sizing."/></label><div className="q-form-row"><label>Assets<input defaultValue="BTC, ETH"/></label><label>Review cadence<input defaultValue="4 hour"/></label></div><button className="q-primary" disabled={busy} onClick={runBacktest}>{busy ? "Running Python backtest…" : "Run Python backtest"} <Play size={16}/></button>{error && <div className="q-notice q-notice-error">{error}</div>}</div><div className="q-panel"><div className="q-card-top"><h2>{metrics ? "Backend backtest complete" : "Awaiting backend result"}</h2><span>{metrics ? "48 submitted candles" : "Python engine required"}</span></div><Chart values={displayedMetrics.equity}/><div className="q-metric-grid"><Metric label="Return" value={`${displayedMetrics.returnPct >= 0 ? "+" : ""}${displayedMetrics.returnPct}%`} tone="positive"/><Metric label="Drawdown" value={`${displayedMetrics.drawdownPct}%`}/><Metric label="Trades" value={String(displayedMetrics.trades)}/><Metric label="Costs" value={`$${fmt(displayedMetrics.costs)}`}/></div><div className="q-notice"><ShieldCheck size={16}/> {metrics ? "Returned by the Python engine and labeled backtested." : "No result is fabricated in the frontend."}</div></div></div></section>;
+}

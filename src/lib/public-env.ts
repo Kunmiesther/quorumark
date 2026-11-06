@@ -2,7 +2,8 @@ type PublicEnvName =
   | "VITE_SUPABASE_PROJECT_ID"
   | "VITE_SUPABASE_URL"
   | "VITE_SUPABASE_PUBLISHABLE_KEY"
-  | "VITE_WALLETCONNECT_PROJECT_ID";
+  | "VITE_WALLETCONNECT_PROJECT_ID"
+  | "VITE_PYTHON_BACKEND_URL";
 
 export type { PublicEnvName };
 
@@ -41,6 +42,8 @@ function readPublicEnv(name: PublicEnvName): string | undefined {
         );
       case "VITE_WALLETCONNECT_PROJECT_ID":
         return import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || env.VITE_WALLETCONNECT_PROJECT_ID;
+      case "VITE_PYTHON_BACKEND_URL":
+        return import.meta.env.VITE_PYTHON_BACKEND_URL || env.VITE_PYTHON_BACKEND_URL;
     }
   })();
   return value && value.trim().length > 0 ? value : undefined;
@@ -50,6 +53,7 @@ export const PUBLIC_SUPABASE_PROJECT_ID = readPublicEnv("VITE_SUPABASE_PROJECT_I
 export const PUBLIC_SUPABASE_URL = readPublicEnv("VITE_SUPABASE_URL");
 export const PUBLIC_SUPABASE_PUBLISHABLE_KEY = readPublicEnv("VITE_SUPABASE_PUBLISHABLE_KEY");
 export const PUBLIC_WALLETCONNECT_PROJECT_ID = readPublicEnv("VITE_WALLETCONNECT_PROJECT_ID");
+export const PUBLIC_PYTHON_BACKEND_URL = readPublicEnv("VITE_PYTHON_BACKEND_URL");
 
 export function getMissingPublicBackendEnv(): PublicEnvName[] {
   return REQUIRED_PUBLIC_BACKEND_ENV.filter((name) => !readPublicEnv(name));

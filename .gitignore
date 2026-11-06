@@ -36,9 +36,12 @@ dist-ssr
 .env.*
 !.env.example
 
+
 # WireGuard runtime material (private keys and generated peer configs)
 
 # Python caches
+.venv/
+backend/.venv/
 __pycache__/
 **/__pycache__/
 *.pyc
@@ -51,4 +54,3 @@ backtest_artifacts/
 # Supabase CLI local link and runtime metadata
 supabase/.temp/
 .vercel
-.env*

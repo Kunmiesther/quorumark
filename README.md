@@ -41,6 +41,17 @@ npm.cmd test
 npm.cmd run build
 ```
 
+The Python engine is a separate service:
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r backend\requirements.txt
+python -m uvicorn app.main:app --reload --app-dir backend --port 8000
+```
+
+Set `VITE_PYTHON_BACKEND_URL=http://127.0.0.1:8000` in `.env.local`, then start the frontend with `npm run dev`. Strategy Studio sends its validated candle fixture to the Python service and renders the returned metrics; it does not silently fall back to frontend-generated performance.
+
 ## Provenance
 
 This repository was reconstructed into a focused Quorumark application from an inherited codebase. Unrelated execution workers, mobile shells, social-growth modules, legacy deployment files, generated marketing assets, and their migrations were removed from the active tree. The retained application code and new Strategy Exchange vertical slice are maintained for the Quorumark hackathon; no inherited production service is used as a silent fallback.
