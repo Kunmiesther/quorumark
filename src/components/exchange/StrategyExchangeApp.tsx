@@ -25,6 +25,7 @@ import {
   type Metrics,
   type Strategy,
 } from "@/lib/strategy-exchange";
+import { getWalletSession, quorumarkApi } from "@/lib/quorumark-api";
 
 export type ExchangeView =
   "marketplace" | "detail" | "studio" | "follower" | "subscriptions" | "verification";
@@ -139,6 +140,22 @@ function Chart({ values, label = "Equity curve" }: { values: number[]; label?: s
   );
 }
 
+type BackendStrategyRecord = {
+  id: string;
+  slug: string;
+  name: string;
+  thesis: string;
+  market: string;
+  supported_assets?: string[];
+  risk_class: Strategy["risk"];
+  cadence: string;
+  monthly_price?: number;
+  status: Strategy["status"];
+  current_version: string;
+  evidence_class: Strategy["evidence"];
+  created_at: string;
+};
+
 export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?: string }) {
   const navigate = useNavigate();
   const [state, setState] = useState(loadExchangeState);
@@ -151,6 +168,59 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
     setState(next);
     saveExchangeState(next);
   };
+
+  useEffect(() => {
+    if (view !== "marketplace") return;
+    quorumarkApi<BackendStrategyRecord[]>("/v1/strategies")
+      .then((records) => {
+        const published = records.map((record) => ({
+          id: String(record.id),
+          slug: String(record.slug),
+          name: String(record.name),
+          creator: "Verified creator",
+          creatorAddress: "wallet identity protected",
+          thesis: String(record.thesis),
+          market: String(record.market),
+          assets: Array.isArray(record.supported_assets) ? record.supported_assets : [],
+          risk: record.risk_class as Strategy["risk"],
+          cadence: String(record.cadence),
+          price: Number(record.monthly_price ?? 0),
+          status: record.status as Strategy["status"],
+          version: String(record.current_version),
+          evidence: record.evidence_class as Strategy["evidence"],
+          sample: false,
+          metrics: {
+            returnPct: 0,
+            winRate: 0,
+            drawdownPct: 0,
+            trades: 0,
+            costs: 0,
+            equity: [10_000],
+          },
+          signals: [
+            {
+              id: `signal-${record.id}`,
+              strategyId: String(record.id),
+              asset: record.supported_assets?.[0] ?? "BTC",
+              side: "long" as const,
+              entry: 1,
+              stop: 0.98,
+              target: 1.04,
+              sizePct: 10,
+              createdAt: String(record.created_at),
+            },
+          ],
+        }));
+        if (published.length)
+          setState((current) => ({
+            ...current,
+            strategies: [...published, ...current.strategies.filter((item) => item.sample)],
+          }));
+      })
+      .catch(() => {
+        // Public discovery remains usable with the clearly-labelled illustrative sample.
+      });
+  }, [view]);
 
   useEffect(() => {
     if (view !== "verification" || !PUBLIC_PYTHON_BACKEND_URL) return;
@@ -218,17 +288,52 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
         ),
     [category, query, state.strategies],
   );
-  function subscribe() {
-    update({
-      ...state,
-      subscription: {
-        strategyId: strategy.id,
-        status: "active",
-        receipt: `sandbox-receipt-${Date.now()}`,
-      },
-    });
-    toast.success("Sandbox access is active");
-    navigate({ to: "/follower" });
+  async function subscribe() {
+    if (strategy.sample) {
+      toast.message("This is an illustrative sample; subscription is unavailable.");
+      return;
+    }
+    if (!state.wallet) {
+      toast.error("Authenticate a wallet before subscribing.");
+      navigate({ to: "/connect-wallet" });
+      return;
+    }
+    try {
+      const result = await quorumarkApi<{ id: string; status: string }>("/v1/subscriptions", {
+        method: "POST",
+        body: JSON.stringify({ strategy_id: strategy.id, environment: "sandbox" }),
+      });
+      update({
+        ...state,
+        subscription: { strategyId: strategy.id, status: "active", receipt: result.id },
+      });
+      toast.success("Sandbox access is active");
+      navigate({ to: "/follower" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Subscription could not be created");
+    }
+  }
+  async function togglePause() {
+    const nextPaused = !state.policy.paused;
+    try {
+      await quorumarkApi("/v1/follower/policy", {
+        method: "PUT",
+        body: JSON.stringify({
+          capital: state.policy.capital,
+          max_trade: state.policy.maxTrade,
+          max_position: state.policy.maxPosition,
+          max_loss: state.policy.maxLoss ?? 250,
+          max_slippage_bps: state.policy.maxSlippage,
+          approved_assets: state.policy.approvedAssets,
+          paused: nextPaused,
+        }),
+      });
+      update({ ...state, policy: { ...state.policy, paused: nextPaused } });
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Your following controls could not be saved",
+      );
+    }
   }
   async function runSignal() {
     if (!PUBLIC_PYTHON_BACKEND_URL) {
@@ -358,9 +463,7 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
           state={state}
           strategy={strategy}
           providerBusy={providerBusy}
-          onPause={() =>
-            update({ ...state, policy: { ...state.policy, paused: !state.policy.paused } })
-          }
+          onPause={togglePause}
           onRun={runSignal}
         />
       )}
@@ -562,6 +665,8 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savedStrategyId, setSavedStrategyId] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
   async function runBacktest() {
     if (!PUBLIC_PYTHON_BACKEND_URL) {
       setError("Strategy testing is not configured. Start the local paper engine first.");
@@ -607,6 +712,61 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
       );
     } finally {
       setBusy(false);
+    }
+  }
+  async function saveDraft(publish = false) {
+    const wallet = getWalletSession();
+    if (!wallet) {
+      setError("Authenticate a wallet before saving a strategy draft.");
+      return;
+    }
+    if (!name.trim()) {
+      setError("Give your strategy a name before saving it.");
+      return;
+    }
+    if (!metrics) {
+      setError("Test the strategy first so its version has real performance evidence.");
+      return;
+    }
+    setPublishing(true);
+    setError(null);
+    try {
+      const created = savedStrategyId
+        ? { id: savedStrategyId }
+        : await quorumarkApi<{ id: string }>("/v1/strategies", {
+            method: "POST",
+            body: JSON.stringify({
+              name,
+              thesis:
+                "A creator-defined reference strategy tested against labeled fixture candles.",
+              market: "Crypto spot",
+              supported_assets: ["BTC", "ETH"],
+              risk_class: "medium",
+              cadence: "Every 4 hours",
+              monthly_price: 0,
+              definition: { type: "reference_crossover", source: "quorumark_fixture" },
+            }),
+          });
+      setSavedStrategyId(created.id);
+      await quorumarkApi(`/v1/strategies/${created.id}/versions`, {
+        method: "POST",
+        body: JSON.stringify({
+          version: "v1.0",
+          definition: { type: "reference_crossover", source: "quorumark_fixture" },
+          backtest_id: "studio-result",
+          backtest_metrics: metrics,
+        }),
+      });
+      if (publish) {
+        await quorumarkApi(`/v1/strategies/${created.id}/publish`, { method: "POST" });
+        toast.success("Strategy published to the local paper marketplace");
+      } else {
+        toast.success("Strategy draft saved");
+      }
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "The strategy could not be saved");
+    } finally {
+      setPublishing(false);
     }
   }
   return (
@@ -693,6 +853,14 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
               <div className="q-notice">
                 <ShieldCheck size={16} /> Calculated from the paper simulation and labeled
                 backtested
+              </div>
+              <div className="q-studio-actions">
+                <button className="q-secondary" onClick={() => saveDraft()} disabled={publishing}>
+                  {publishing ? "Saving…" : "Save draft"}
+                </button>
+                <button className="q-primary" onClick={() => saveDraft(true)} disabled={publishing}>
+                  Publish version <ArrowRight size={15} />
+                </button>
               </div>
             </>
           ) : (

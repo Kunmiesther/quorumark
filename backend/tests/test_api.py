@@ -1,6 +1,9 @@
 from fastapi.testclient import TestClient
+from pathlib import Path
 
 from app.main import app
+from app import main
+from app.repository import PaperRepository
 
 
 def test_health_is_paper_only():
@@ -16,3 +19,23 @@ def test_backtest_api_validates_and_returns_metrics():
     body = response.json()
     assert body["evidence_class"] == "backtested"
     assert "equity_curve" in body and "performance" in body
+
+
+def test_local_marketplace_creator_lifecycle_is_owner_scoped(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(main, "repository", PaperRepository(str(tmp_path / "marketplace.db")))
+    client = TestClient(app)
+    headers = {"x-quorumark-identity": "near:creator.testnet"}
+    created = client.post("/v1/strategies", headers=headers, json={
+        "name": "Atlas Range",
+        "thesis": "A deterministic range strategy for a paper marketplace test.",
+        "market": "Crypto spot",
+        "supported_assets": ["BTC"],
+        "risk_class": "medium",
+        "definition": {"type": "reference_crossover"},
+    })
+    assert created.status_code == 201
+    strategy_id = created.json()["id"]
+    assert client.post(f"/v1/strategies/{strategy_id}/publish", headers=headers).status_code == 200
+    assert client.get("/v1/strategies").json()[0]["id"] == strategy_id
+    assert client.post("/v1/subscriptions", headers={"x-quorumark-identity": "near:follower.testnet"}, json={"strategy_id": strategy_id, "environment": "sandbox"}).status_code == 201
+    assert client.post(f"/v1/strategies/{strategy_id}/publish", headers={"x-quorumark-identity": "near:other.testnet"}).status_code == 404

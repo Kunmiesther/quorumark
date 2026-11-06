@@ -15,6 +15,8 @@ Quorumark is a NEAR-oriented marketplace for autonomous trading methods. Creator
 
 The browser can browse the demo without a provisioned database, but paper decisions and executions now go through the Python backend. Local development uses an explicit SQLite ledger at `backend/.data/quorumark.db`; it is not a substitute for applying the Quorumark migrations to a Quorumark-owned Supabase project. Without a configured authenticated database, multi-user persistence remains unavailable.
 
+When running locally, the Python service also exposes the connected marketplace slice: `POST /v1/strategies` creates a creator-owned draft, `/v1/strategies/{id}/versions` records a version, `/v1/strategies/{id}/publish` publishes it, `GET /v1/strategies` lists published records, `POST /v1/subscriptions` creates a sandbox entitlement, and `/v1/follower/policy` stores a follower policy. These protected routes require `x-quorumark-identity` and are intentionally enabled only when `QUORUMARK_PYTHON_ENVIRONMENT=local`; this is a development adapter, not a production authentication mechanism. Hosted use must replace it with a verified Supabase session before enabling writes.
+
 ## Safety and evidence
 
 Every execution in this repository is paper, sandbox, or explicitly supported testnet only. There is no live-money execution path. Backtested, paper-traded, testnet-executed, and live-verified evidence classes remain separate; the demo does not claim live performance.

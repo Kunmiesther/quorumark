@@ -10,6 +10,7 @@ import {
   type WalletProviderId,
 } from "@/lib/wallet/providers";
 import { supabase } from "@/integrations/supabase/client";
+import { saveWalletSession } from "@/lib/quorumark-api";
 
 export const Route = createFileRoute("/connect-wallet")({
   component: ConnectWalletPage,
@@ -74,6 +75,7 @@ function ConnectWalletPage() {
       });
       if (verified.error || !verified.data?.ok) throw new Error("Signature verification failed");
       setConnected({ address: result.publicAddress, chain: result.chain });
+      saveWalletSession({ address: result.publicAddress, chain: result.chain, verified: true });
       toast.success("Wallet authenticated");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Wallet authentication failed");
