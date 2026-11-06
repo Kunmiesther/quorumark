@@ -10,6 +10,7 @@ declare module "lucide-react" {
   export const ExternalLink: ComponentType<LucideProps>;
   export const LockKeyhole: ComponentType<LucideProps>;
   export const Loader2: ComponentType<LucideProps>;
+  export const Menu: ComponentType<LucideProps>;
   export const Network: ComponentType<LucideProps>;
   export const Pause: ComponentType<LucideProps>;
   export const Play: ComponentType<LucideProps>;
@@ -17,4 +18,5 @@ declare module "lucide-react" {
   export const Sparkles: ComponentType<LucideProps>;
   export const Wallet: ComponentType<LucideProps>;
   export const WalletCards: ComponentType<LucideProps>;
+  export const X: ComponentType<LucideProps>;
 }

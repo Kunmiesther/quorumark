@@ -20,8 +20,7 @@ function ConnectWalletPage() {
       if (!near?.signIn) throw new Error("Native NEAR wallet selector is not configured for this environment yet");
       const result = await near.signIn();
       if (!result.accountId) throw new Error("NEAR wallet did not return an account");
-      setConnected({ address: result.accountId, chain: "NEAR" });
-      toast.success("NEAR wallet connected. Sign the challenge to authenticate.");
+      toast.message("NEAR wallet connected. A native signing adapter is required to finish authentication.");
     } catch (error) { toast.error(error instanceof Error ? error.message : "NEAR wallet connection failed"); } finally { setBusy(null); }
   }
   async function connectEvm(provider: WalletProviderId) {

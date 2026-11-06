@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowRight, Check, CircleAlert, ExternalLink, LockKeyhole, Pause, Play, ShieldCheck, Wallet } from "lucide-react";
+import { ArrowRight, Check, CircleAlert, ExternalLink, LockKeyhole, Menu, Pause, Play, ShieldCheck, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
-import { connectProvider, listProviders, signChallenge, type WalletProviderId } from "@/lib/wallet/providers";
-import { supabase } from "@/integrations/supabase/client";
 import { PUBLIC_PYTHON_BACKEND_URL } from "@/lib/public-env";
 import { evaluateSignal, loadExchangeState, recomputePerformance, saveExchangeState, type Metrics, type RiskPolicy, type Strategy } from "@/lib/strategy-exchange";
 
@@ -18,7 +16,8 @@ function buildFixtureCandles() {
 }
 
 function Shell({ children, wallet, onWallet }: { children: ReactNode; wallet?: string; onWallet: () => void }) {
-  return <div className="q-exchange"><header className="q-exchange-header"><Link to="/marketplace" className="q-exchange-brand"><span className="q-mark">Q</span><span>Quorumark <small>strategy exchange</small></span></Link><nav><Link to="/marketplace">Discover</Link><Link to="/studio">Studio</Link><Link to="/follower">Follower desk</Link><Link to="/verification">Verification</Link></nav><button className="q-wallet-button" onClick={onWallet}><Wallet size={16}/>{wallet ? `${wallet.slice(0, 6)}…${wallet.slice(-4)}` : "Connect wallet"}</button></header><main className="q-exchange-main">{children}</main></div>;
+  const [open, setOpen] = useState(false);
+  return <div className="q-exchange"><header className="q-exchange-header"><Link to="/marketplace" className="q-exchange-brand"><span className="q-mark">Q</span><span>Quorumark <small>strategy exchange</small></span></Link><nav className={open ? "q-mobile-open" : ""}><Link to="/marketplace" onClick={() => setOpen(false)}>Marketplace</Link><Link to="/studio" onClick={() => setOpen(false)}>Strategy Studio</Link><Link to="/follower" onClick={() => setOpen(false)}>Follower Desk</Link><Link to="/verification" onClick={() => setOpen(false)}>Verification</Link></nav><div className="q-header-actions"><button className="q-wallet-button" onClick={onWallet}><Wallet size={16}/>{wallet ? `${wallet.slice(0, 6)}…${wallet.slice(-4)}` : "Connect wallet"}</button><button className="q-menu-button" aria-label={open ? "Close navigation" : "Open navigation"} onClick={() => setOpen(!open)}>{open ? <X size={19} /> : <Menu size={19} />}</button></div></header><main className="q-exchange-main">{children}</main></div>;
 }
 
 function Metric({ label, value, tone = "" }: { label: string; value: string; tone?: string }) { return <div className="q-metric"><span>{label}</span><strong className={tone}>{value}</strong></div>; }
@@ -44,19 +43,7 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
       })
       .catch((error) => setLedgerError(error instanceof Error ? error.message : "The paper ledger could not be loaded"));
   }, [state.wallet, strategy.signals, view]);
-  async function connectWallet() {
-    const provider = listProviders().find((item) => item.status === "available")?.id ?? "metamask";
-    setProviderBusy(true);
-    try {
-      const conn = await connectProvider(provider as WalletProviderId);
-      const challenge = await supabase.functions.invoke("wallet-challenge", { body: { provider: conn.provider, chain: conn.chain, public_address: conn.publicAddress } });
-      if (challenge.error || !challenge.data?.challenge_text) throw new Error("Wallet authentication is not configured in this environment");
-      const signed = await signChallenge(conn.provider, conn.publicAddress, challenge.data.challenge_text);
-      const verified = await supabase.functions.invoke("wallet-verify", { body: { provider: conn.provider, chain: conn.chain, public_address: conn.publicAddress, signature: signed.signature, nonce_hash: challenge.data.nonce_hash } });
-      if (verified.error || !verified.data?.ok) throw new Error("The wallet signature could not be verified");
-      update({ ...state, wallet: conn.publicAddress }); toast.success("Wallet authenticated");
-    } catch (error) { toast.error(error instanceof Error ? error.message : "Wallet connection failed"); } finally { setProviderBusy(false); }
-  }
+  function connectWallet() { navigate({ to: "/connect-wallet" }); }
   const filtered = useMemo(() => state.strategies.filter((item) => `${item.name} ${item.creator} ${item.market}`.toLowerCase().includes(query.toLowerCase())), [query, state.strategies]);
   function subscribe() { update({ ...state, subscription: { strategyId: strategy.id, status: "active", receipt: `sandbox-receipt-${Date.now()}` } }); toast.success("Sandbox entitlement active"); navigate({ to: "/follower" }); }
   async function runSignal() {
@@ -120,5 +107,5 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
   }
 
   const displayedMetrics = metrics ?? strategy.metrics;
-  return <section><button className="q-back" onClick={onBack}>← Back to exchange</button><div className="q-page-heading"><div><p className="q-kicker">Strategy studio</p><h1>Publish a method, not a promise</h1><p>Configure a reference strategy, send historical candles to the Python engine, and inspect returned evidence.</p></div><span className="q-status"><i/> Sandbox only</span></div><div className="q-studio-grid"><div className="q-panel q-form"><label>Strategy name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Atlas mean reversion"/></label><label>Trading thesis<textarea defaultValue="A deterministic reference strategy with explicit entries, exits, and volatility based sizing."/></label><div className="q-form-row"><label>Assets<input defaultValue="BTC, ETH"/></label><label>Review cadence<input defaultValue="4 hour"/></label></div><button className="q-primary" disabled={busy} onClick={runBacktest}>{busy ? "Running Python backtest…" : "Run Python backtest"} <Play size={16}/></button>{error && <div className="q-notice q-notice-error">{error}</div>}</div><div className="q-panel"><div className="q-card-top"><h2>{metrics ? "Backend backtest complete" : "Awaiting backend result"}</h2><span>{metrics ? "48 submitted candles" : "Python engine required"}</span></div><Chart values={displayedMetrics.equity}/><div className="q-metric-grid"><Metric label="Return" value={`${displayedMetrics.returnPct >= 0 ? "+" : ""}${displayedMetrics.returnPct}%`} tone="positive"/><Metric label="Drawdown" value={`${displayedMetrics.drawdownPct}%`}/><Metric label="Trades" value={String(displayedMetrics.trades)}/><Metric label="Costs" value={`$${fmt(displayedMetrics.costs)}`}/></div><div className="q-notice"><ShieldCheck size={16}/> {metrics ? "Returned by the Python engine and labeled backtested." : "No result is fabricated in the frontend."}</div></div></div></section>;
+  return <section><button className="q-back" onClick={onBack}>← Back to marketplace</button><div className="q-page-heading"><div><p className="q-kicker">Strategy Studio</p><h1>Turn a method into something you can inspect</h1><p>Describe your approach, choose the market it watches, then study a paper simulation before publishing a version.</p></div><span className="q-status"><i/> Paper only</span></div><div className="q-studio-grid"><div className="q-panel q-form"><label>Strategy name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, Atlas range break"/></label><label>Describe your strategy<textarea defaultValue="A rules based strategy with confirmed entries, explicit exits, and a defined risk budget."/></label><div className="q-form-row"><label>Markets<input defaultValue="BTC, ETH"/></label><label>Review cadence<input defaultValue="Every 4 hours"/></label></div><button className="q-primary" disabled={busy} onClick={runBacktest}>{busy ? "Testing your strategy…" : "Test my strategy"} <Play size={16}/></button>{error && <div className="q-notice q-notice-error">{error}</div>}</div><div className="q-panel q-studio-results"><div className="q-card-top"><h2>{metrics ? "Your simulation" : "Your results"}</h2><span>{metrics ? "Historical paper simulation" : "Run a test to see your curve"}</span></div><Chart values={displayedMetrics.equity}/><div className="q-metric-grid"><Metric label="Return" value={`${displayedMetrics.returnPct >= 0 ? "+" : ""}${displayedMetrics.returnPct}%`} tone="positive"/><Metric label="Drawdown" value={`${displayedMetrics.drawdownPct}%`}/><Metric label="Trades" value={String(displayedMetrics.trades)}/><Metric label="Costs" value={`$${fmt(displayedMetrics.costs)}`}/></div><div className="q-notice"><ShieldCheck size={16}/> {metrics ? "Calculated from the paper simulation and labeled backtested." : "Results appear here after a real simulation."}</div></div></div></section>;
 }
