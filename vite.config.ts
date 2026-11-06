@@ -8,10 +8,10 @@ export default defineConfig({
   plugins: [
     tsconfigPaths(),
     tailwindcss(),
-    react(),
     ...tanstackStart({
       server: { entry: "server" },
       router: { routeFileIgnorePattern: "__tests__" },
     }),
+    react(),
   ],
 });
