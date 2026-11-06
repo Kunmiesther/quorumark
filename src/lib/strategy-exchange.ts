@@ -23,7 +23,7 @@ export type Strategy = {
 
 export type Metrics = { returnPct: number; winRate: number; drawdownPct: number; trades: number; costs: number; equity: number[] };
 export type Signal = { id: string; strategyId: string; asset: string; side: "long" | "short"; entry: number; stop: number; target: number; sizePct: number; createdAt: string };
-export type RiskPolicy = { capital: number; maxTrade: number; maxPosition: number; maxSlippage: number; approvedAssets: string[]; paused: boolean };
+export type RiskPolicy = { capital: number; maxTrade: number; maxPosition: number; maxLoss?: number; maxSlippage: number; approvedAssets: string[]; paused: boolean };
 export type Decision = { id: string; signalId: string; follower: string; status: "accepted" | "rejected"; reason: string; notional: number; executionId?: string; at: string };
 export type Execution = { id: string; signalId: string; follower: string; asset: string; side: string; notional: number; entry: number; exit: number; pnl: number; fee: number; environment: "paper"; createdAt: string };
 
@@ -62,25 +62,32 @@ export function evaluateSignal(signal: Signal, policy: RiskPolicy, follower: str
 }
 
 export function executePaper(decision: Decision, signal: Signal, follower: string): Execution | null {
-  if (decision.status !== "accepted") return null;
-  const move = signal.side === "long" ? 0.012 : -0.012;
-  const exit = Number((signal.entry * (1 + move)).toFixed(2));
-  const pnl = Number((decision.notional * move).toFixed(2));
-  return { id: `paper-${decision.id}`, signalId: signal.id, follower, asset: signal.asset, side: signal.side, notional: decision.notional, entry: signal.entry, exit, pnl, fee: Number((decision.notional * 0.0006).toFixed(2)), environment: "paper", createdAt: now };
+  void decision; void signal; void follower;
+  return null;
 }
 
 export function recomputePerformance(executions: Execution[], capital: number): Metrics {
   const costs = executions.reduce((sum, item) => sum + item.fee, 0);
   const pnl = executions.reduce((sum, item) => sum + item.pnl - item.fee, 0);
   const wins = executions.filter((item) => item.pnl > item.fee).length;
-  return { returnPct: Number((pnl / capital * 100).toFixed(2)), winRate: executions.length ? Number((wins / executions.length * 100).toFixed(1)) : 0, drawdownPct: 0, trades: executions.length, costs: Number(costs.toFixed(2)), equity: [capital, Number((capital + pnl).toFixed(2))] };
+  let balance = capital;
+  let peak = capital;
+  let drawdown = 0;
+  const equity = [capital];
+  for (const execution of executions) {
+    balance += execution.pnl - execution.fee;
+    peak = Math.max(peak, balance);
+    drawdown = Math.max(drawdown, peak > 0 ? (peak - balance) / peak * 100 : 0);
+    equity.push(Number(balance.toFixed(2)));
+  }
+  return { returnPct: Number((pnl / capital * 100).toFixed(2)), winRate: executions.length ? Number((wins / executions.length * 100).toFixed(1)) : 0, drawdownPct: Number(drawdown.toFixed(2)), trades: executions.length, costs: Number(costs.toFixed(2)), equity };
 }
 
 const STORAGE = "quorumark.strategy-exchange.v1";
 export type ExchangeState = { strategies: Strategy[]; decisions: Decision[]; executions: Execution[]; policy: RiskPolicy; wallet?: string; subscription?: { strategyId: string; status: "active" | "expired"; receipt: string } };
 export function loadExchangeState(): ExchangeState {
-  if (typeof window === "undefined") return { strategies: seedStrategies, decisions: [], executions: [], policy: { capital: 10000, maxTrade: 1500, maxPosition: 2500, maxSlippage: 30, approvedAssets: ["BTC", "ETH"], paused: false } };
-  try { const saved = JSON.parse(localStorage.getItem(STORAGE) ?? "null") as ExchangeState | null; if (saved) return saved; } catch { /* recover with clean demo state */ }
-  return { strategies: seedStrategies, decisions: [], executions: [], policy: { capital: 10000, maxTrade: 1500, maxPosition: 2500, maxSlippage: 30, approvedAssets: ["BTC", "ETH"], paused: false } };
+  if (typeof window === "undefined") return { strategies: seedStrategies, decisions: [], executions: [], policy: { capital: 10000, maxTrade: 1500, maxPosition: 2500, maxLoss: 250, maxSlippage: 30, approvedAssets: ["BTC", "ETH"], paused: false } };
+  try { const saved = JSON.parse(localStorage.getItem(STORAGE) ?? "null") as ExchangeState | null; if (saved) return { ...saved, decisions: [], executions: [] }; } catch { /* recover with clean demo state */ }
+  return { strategies: seedStrategies, decisions: [], executions: [], policy: { capital: 10000, maxTrade: 1500, maxPosition: 2500, maxLoss: 250, maxSlippage: 30, approvedAssets: ["BTC", "ETH"], paused: false } };
 }
-export function saveExchangeState(state: ExchangeState) { if (typeof window !== "undefined") localStorage.setItem(STORAGE, JSON.stringify(state)); }
+export function saveExchangeState(state: ExchangeState) { if (typeof window !== "undefined") localStorage.setItem(STORAGE, JSON.stringify({ ...state, decisions: [], executions: [] })); }

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class Candle(BaseModel):
@@ -12,6 +12,9 @@ class Candle(BaseModel):
     high: float = Field(gt=0)
     low: float = Field(gt=0)
     close: float = Field(gt=0)
+    volume: float = Field(default=0, ge=0)
+    source: str = Field(default="fixture", min_length=1, max_length=80)
+    complete: bool = True
 
     @field_validator("high")
     @classmethod
@@ -23,9 +26,17 @@ class Candle(BaseModel):
     @field_validator("low")
     @classmethod
     def low_covers_range(cls, value: float, info):
-        if "open" in info.data and value > info.data["open"]:
-            raise ValueError("low must be at most open")
+        if "open" in info.data and value > min(info.data["open"], info.data.get("close", value)):
+            raise ValueError("low must be at most open and close")
         return value
+
+    @model_validator(mode="after")
+    def high_covers_close(self):
+        if self.high < max(self.open, self.close):
+            raise ValueError("high must cover open and close")
+        if self.low > min(self.open, self.close):
+            raise ValueError("low must cover open and close")
+        return self
 
 
 class ReferenceStrategyParams(BaseModel):
@@ -34,6 +45,10 @@ class ReferenceStrategyParams(BaseModel):
     initial_cash: float = Field(default=10_000, gt=0, le=10_000_000)
     allocation_pct: float = Field(default=25, gt=0, le=100)
     fee_bps: float = Field(default=10, ge=0, le=500)
+    slippage_bps: float = Field(default=0, ge=0, le=500)
+    stop_loss_pct: float = Field(default=0, ge=0, le=100)
+    take_profit_pct: float = Field(default=0, ge=0, le=500)
+    partial_take_profit_pct: float = Field(default=50, ge=0, le=100)
 
     @field_validator("slow_window")
     @classmethod
@@ -46,6 +61,8 @@ class ReferenceStrategyParams(BaseModel):
 class BacktestRequest(BaseModel):
     candles: list[Candle] = Field(min_length=10, max_length=10_000)
     strategy: ReferenceStrategyParams = Field(default_factory=ReferenceStrategyParams)
+    strategy_version: str = Field(default="reference.v1", min_length=1, max_length=100)
+    source: str = Field(default="fixture", min_length=1, max_length=80)
 
     @field_validator("candles")
     @classmethod
@@ -60,6 +77,9 @@ class Signal(BaseModel):
     side: Literal["long", "flat"]
     price: float = Field(gt=0)
     reason: str
+    strategy_id: str = "reference"
+    strategy_version: str = "reference.v1"
+    signal_id: str | None = None
 
 
 class Execution(BaseModel):
@@ -69,6 +89,13 @@ class Execution(BaseModel):
     quantity: float = Field(gt=0)
     fee: float = Field(ge=0)
     realized_pnl: float = 0
+    order_type: Literal["entry", "exit", "partial_exit", "rejected"] = "entry"
+    position_id: str | None = None
+    slippage: float = 0
+    reason: str = ""
+    notional: float = 0
+    environment: Literal["paper"] = "paper"
+    follower_id: str | None = None
 
 
 class Performance(BaseModel):
@@ -80,6 +107,8 @@ class Performance(BaseModel):
     max_drawdown_pct: float
     win_rate_pct: float
     trade_count: int
+    unrealized_pnl: float = 0
+    realized_gross_pnl: float = 0
 
 
 class BacktestResponse(BaseModel):
@@ -89,6 +118,65 @@ class BacktestResponse(BaseModel):
     executions: list[Execution]
     equity_curve: list[float]
     performance: Performance
+    data_source: str = "fixture"
+    evidence_hash: str = ""
+    backtest_id: str | None = None
+
+
+class RiskPolicy(BaseModel):
+    capital: float = Field(gt=0, le=10_000_000)
+    max_trade: float = Field(gt=0)
+    max_position: float = Field(gt=0)
+    max_loss: float = Field(gt=0)
+    max_data_age_seconds: int = Field(default=86_400, ge=60, le=31_536_000)
+    fee_bps: float = Field(default=10, ge=0, le=500)
+    slippage_bps: float = Field(default=5, ge=0, le=500)
+    quantity_step: float = Field(default=0.000001, gt=0)
+    min_order_size: float = Field(default=0.000001, gt=0)
+    approved_assets: list[str] = Field(min_length=1)
+    paused: bool = False
+
+
+class SignalInput(BaseModel):
+    id: str = Field(min_length=1, max_length=160)
+    strategy_id: str = Field(min_length=1, max_length=120)
+    strategy_version: str = Field(min_length=1, max_length=100)
+    asset: str = Field(min_length=1, max_length=30)
+    side: Literal["long", "short"]
+    entry: float = Field(gt=0)
+    stop: float = Field(gt=0)
+    target: float = Field(gt=0)
+    size_pct: float = Field(gt=0, le=100)
+    created_at: datetime
+
+
+class PaperExecutionRequest(BaseModel):
+    follower_id: str = Field(min_length=1, max_length=160)
+    signal: SignalInput
+    policy: RiskPolicy
+    candles: list[Candle] = Field(min_length=2, max_length=10_000)
+    idempotency_key: str | None = Field(default=None, max_length=200)
+    source: str = Field(default="fixture", min_length=1, max_length=80)
+
+
+class RiskDecisionResponse(BaseModel):
+    status: Literal["accepted", "rejected"]
+    reason_code: str
+    reason: str
+    notional: float
+    quantity: float
+    reserved_capital: float
+    estimated_loss: float
+
+
+class PaperExecutionResponse(BaseModel):
+    evidence_class: Literal["paper_traded"] = "paper_traded"
+    paper_only: bool = True
+    decision: RiskDecisionResponse
+    execution: Execution | None = None
+    idempotency_key: str
+    evidence_hash: str
+    execution_id: str | None = None
 
 
 class AgentEvaluationRequest(BaseModel):

@@ -11,15 +11,15 @@ describe("strategy exchange safety boundary", () => {
   it("allows the same signal for a follower with a larger independent limit", () => {
     const decision = evaluateSignal(signal, { capital: 10_000, maxTrade: 2_000, maxPosition: 2_500, maxSlippage: 30, approvedAssets: ["BTC"], paused: false }, "follower-b");
     expect(decision.status).toBe("accepted");
-    expect(executePaper(decision, signal, "follower-b")?.environment).toBe("paper");
+    expect(executePaper(decision, signal, "follower-b")).toBeNull();
   });
   it("recomputes net performance with fees separated", () => {
     const decision = evaluateSignal(signal, { capital: 10_000, maxTrade: 2_000, maxPosition: 2_500, maxSlippage: 30, approvedAssets: ["BTC"], paused: false }, "follower-b");
-    const execution = executePaper(decision, signal, "follower-b");
-    const metrics = recomputePerformance(execution ? [execution] : [], 10_000);
+    const execution = { id: "backend-paper", signalId: signal.id, follower: "follower-b", asset: "BTC", side: "long", notional: decision.notional, entry: signal.entry, exit: signal.target, pnl: 20, fee: 1, environment: "paper" as const, createdAt: "2026-11-06T00:00:00.000Z" };
+    const metrics = recomputePerformance([execution], 10_000);
     expect(metrics.trades).toBe(1);
     expect(metrics.costs).toBeGreaterThan(0);
-    expect(metrics.returnPct).toBeLessThan(execution!.pnl / 100);
+    expect(metrics.returnPct).toBeLessThan(execution.pnl / 100);
   });
   it("produces deterministic backtest output", () => {
     expect(runReferenceBacktest()).toEqual(runReferenceBacktest());

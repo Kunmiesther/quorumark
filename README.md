@@ -13,7 +13,7 @@ Quorumark is a NEAR-oriented marketplace for autonomous trading methods. Creator
 - `/verification` recomputes metrics from execution records.
 - `/connect-wallet` presents native NEAR first and compatible EVM wallets second.
 
-The browser demo persists local state so it can be evaluated without a provisioned database. Supabase migrations define the Quorumark strategy, subscription, signal, policy, execution, and wallet-authentication tables with RLS enabled. The local demo is not a substitute for applying those migrations to a Quorumark-owned Supabase project.
+The browser can browse the demo without a provisioned database, but paper decisions and executions now go through the Python backend. Local development uses an explicit SQLite ledger at `backend/.data/quorumark.db`; it is not a substitute for applying the Quorumark migrations to a Quorumark-owned Supabase project. Without a configured authenticated database, multi-user persistence remains unavailable.
 
 ## Safety and evidence
 
@@ -51,6 +51,8 @@ python -m uvicorn app.main:app --reload --app-dir backend --port 8000
 ```
 
 Set `VITE_PYTHON_BACKEND_URL=http://127.0.0.1:8000` in `.env.local`, then start the frontend with `npm run dev`. Strategy Studio sends its validated candle fixture to the Python service and renders the returned metrics; it does not silently fall back to frontend-generated performance.
+
+The Python service also owns follower paper decisions at `POST /v1/paper/executions`. It validates candle chronology and freshness, evaluates the follower's independent limits, applies paper fees and slippage, records an idempotency key, and returns a `paper_traded` evidence hash. The endpoint never calls a broker or signer.
 
 ## Provenance
 

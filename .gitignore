@@ -42,6 +42,7 @@ dist-ssr
 # Python caches
 .venv/
 backend/.venv/
+backend/.data/
 __pycache__/
 **/__pycache__/
 *.pyc
