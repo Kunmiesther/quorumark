@@ -1,5 +1,0 @@
-ccxt
-pandas
-supabase
-python-dotenv
-requests

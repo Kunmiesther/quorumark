@@ -37,8 +37,6 @@ dist-ssr
 !.env.example
 
 # WireGuard runtime material (private keys and generated peer configs)
-infra/aster-egress/config/
-infra/aster-egress/state/
 
 # Python caches
 __pycache__/

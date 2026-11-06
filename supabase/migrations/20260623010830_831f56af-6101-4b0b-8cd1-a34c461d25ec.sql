@@ -1,1 +1,0 @@
-UPDATE public.subscriptions SET tier='pro' WHERE user_id='ea6cf6f1-94c3-4d25-913c-237b541a309f';

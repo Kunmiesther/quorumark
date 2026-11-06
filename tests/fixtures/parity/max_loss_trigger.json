@@ -1,8 +1,0 @@
-{
-  "description": "Position at margin=$60, unrealizedWorst=-$30 \u2192 shouldTriggerMaxLoss must be true (0.50 threshold). Python mirror is DEBT-02 (skipped).",
-  "margin_usd": 60.0,
-  "unrealized_worst_usd": -30.0,
-  "expected": {
-    "triggered": true
-  }
-}

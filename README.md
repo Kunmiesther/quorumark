@@ -1,26 +1,27 @@
 # Quorumark Strategy Exchange
 
-Quorumark is a NEAR oriented marketplace for autonomous trading methods. Creators publish versioned private strategies with inspectable evidence. Followers subscribe, receive signals, and make independent paper execution decisions under their own risk policy.
+Quorumark is a NEAR-oriented marketplace for autonomous trading methods. Creators build versioned strategies, attach inspectable paper evidence, and publish private signals. Followers subscribe, apply their own risk rules, and execute independently in a paper or supported testnet environment.
 
-## The working demo
+## Product demo
 
-Open the application and use these routes:
+- `/` presents the Strategy Exchange.
+- `/marketplace` discovers the clearly labelled sample strategy.
+- `/marketplace/aurora-breakout` shows its version, risk, evidence class, equity curve, and sandbox subscription action.
+- `/studio` runs a deterministic reference backtest.
+- `/follower` evaluates a signal against follower policy, deduplicates it, and creates a paper receipt only when accepted.
+- `/subscriptions` shows sandbox entitlement state.
+- `/verification` recomputes metrics from execution records.
+- `/connect-wallet` presents native NEAR first and compatible EVM wallets second.
 
-* `/marketplace` discovers the clearly labeled sample strategy.
-* `/marketplace/aurora-breakout` shows its version, evidence class, equity curve, and sandbox subscription action.
-* `/studio` runs a deterministic reference backtest and keeps its output labeled backtested.
-* `/follower` applies a follower policy to the latest signal, deduplicates the signal, and creates a paper receipt only when accepted.
-* `/verification` recomputes net return, win rate, trade count, and fees from execution records.
+The browser demo persists local state so it can be evaluated without a provisioned database. Supabase migrations define the Quorumark strategy, subscription, signal, policy, execution, and wallet-authentication tables with RLS enabled. The local demo is not a substitute for applying those migrations to a Quorumark-owned Supabase project.
 
-The browser demo persists its state locally so judges can complete the flow without a provisioned backend. The Supabase migration in `supabase/migrations/20261105090000_strategy_exchange.sql` defines the durable production tables, indexes, and row level policies for strategies, versions, subscriptions, signals, risk policies, decisions, and executions.
+## Safety and evidence
 
-## Safety boundary
+Every execution in this repository is paper, sandbox, or explicitly supported testnet only. There is no live-money execution path. Backtested, paper-traded, testnet-executed, and live-verified evidence classes remain separate; the demo does not claim live performance.
 
-All executions in this contribution are paper executions. There is no production trade path. The strategy sample is not a claim of live performance. Evidence is classified as backtested, paper traded, testnet executed, or live verified, and only the first two are currently reachable in the exchange demo.
+Wallet challenge and signature verification are isolated in the two retained Supabase Edge Functions. Wallet connection alone is not treated as a production trading authorization. Native NEAR wallet selector/session exchange remains configuration-dependent and is surfaced honestly when unavailable.
 
-Wallet connection uses the existing EIP 1193 and EIP 6963 discovery plus the server issued challenge and signature verification functions. A wallet connection is not treated as an authenticated session by itself. Native NEAR wallet support and a first class wallet session still require a configured NEAR wallet adapter and backend session exchange.
-
-NEAR Intents is isolated behind `src/lib/near-intents-adapter.ts`. Official documentation describes quote request, solver quote selection, wallet authorization, relay submission, and onchain settlement verification. Until Quorumark has a supported route, relay endpoint, and credentials, the adapter refuses quote and transaction preparation instead of fabricating hashes or confirmations.
+NEAR Intents is isolated in `src/lib/near-intents-adapter.ts`. It refuses quote or settlement claims until a supported relay, route, and credentials are configured; it never fabricates a transaction hash.
 
 ## Local development
 
@@ -29,15 +30,17 @@ npm ci
 npm run dev
 ```
 
-Required public variables for the existing backend are `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. Wallet challenge verification requires the existing `wallet-challenge` and `wallet-verify` Supabase functions. The exchange demo remains usable without them, but wallet authentication will report that the backend is not configured.
+Copy `.env.example` to `.env.local` and provide only the values required for the environment you are testing. Public `VITE_*` values are safe for the browser; session secrets, provider keys, service-role keys, and Intents credentials are server-side only. Never commit `.env`, `.env.local`, private keys, or credentials.
 
-Useful checks:
+Checks:
 
 ```sh
-npx tsc --noEmit
-npm run lint
-npm test
-npm run build
+npx.cmd tsc --noEmit
+npm.cmd run lint
+npm.cmd test
+npm.cmd run build
 ```
 
-The exchange contribution is new hackathon work layered over the existing Quorumark paper trading, wallet verification, audit, and Supabase infrastructure. Existing TurtleBot and legacy execution surfaces remain isolated and are not activated by this marketplace.
+## Provenance
+
+This repository was reconstructed into a focused Quorumark application from an inherited codebase. Unrelated execution workers, mobile shells, social-growth modules, legacy deployment files, generated marketing assets, and their migrations were removed from the active tree. The retained application code and new Strategy Exchange vertical slice are maintained for the Quorumark hackathon; no inherited production service is used as a silent fallback.

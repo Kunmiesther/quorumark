@@ -11,19 +11,8 @@ const REQUIRED_PUBLIC_BACKEND_ENV: PublicEnvName[] = [
   "VITE_SUPABASE_PUBLISHABLE_KEY",
 ];
 
-const MISSING_ENV_SESSION_KEY = "tb_public_backend_env_missing_reported";
+const MISSING_ENV_SESSION_KEY = "quorumark_public_backend_env_missing_reported";
 const PUBLIC_BACKEND_ENV_RETRY_DELAYS_MS = [0, 250, 750, 1_500];
-
-// Hardcoded last-resort fallback. These are PUBLIC (publishable / anon) values
-// and safe to ship in the client bundle. They exist so a broken build-time env
-// injection can never take the whole app down with a "Backend configuration
-// needed" screen. If the managed env vars are present they take precedence.
-const HARDCODED_PUBLIC_ENV: Record<PublicEnvName, string | undefined> = {
-  VITE_SUPABASE_PROJECT_ID: "sthdmulczzebfcmihhca",
-  VITE_SUPABASE_URL: "https://sthdmulczzebfcmihhca.supabase.co",
-  VITE_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_duAF8NclyRsIOgwEUgyWfw_UFvAxIvd",
-  VITE_WALLETCONNECT_PROJECT_ID: undefined,
-};
 
 const proc: { env?: Record<string, string | undefined> } =
   typeof process !== "undefined" ? (process as unknown as { env?: Record<string, string | undefined> }) : {};
@@ -54,15 +43,13 @@ function readPublicEnv(name: PublicEnvName): string | undefined {
         return import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || env.VITE_WALLETCONNECT_PROJECT_ID;
     }
   })();
-  const resolved = value && value.trim().length > 0 ? value : HARDCODED_PUBLIC_ENV[name];
-  return resolved && resolved.trim().length > 0 ? resolved : undefined;
+  return value && value.trim().length > 0 ? value : undefined;
 }
 
-
-export const PUBLIC_SUPABASE_PROJECT_ID = HARDCODED_PUBLIC_ENV.VITE_SUPABASE_PROJECT_ID;
-export const PUBLIC_SUPABASE_URL = HARDCODED_PUBLIC_ENV.VITE_SUPABASE_URL;
-export const PUBLIC_SUPABASE_PUBLISHABLE_KEY = HARDCODED_PUBLIC_ENV.VITE_SUPABASE_PUBLISHABLE_KEY;
-export const PUBLIC_WALLETCONNECT_PROJECT_ID = HARDCODED_PUBLIC_ENV.VITE_WALLETCONNECT_PROJECT_ID;
+export const PUBLIC_SUPABASE_PROJECT_ID = readPublicEnv("VITE_SUPABASE_PROJECT_ID");
+export const PUBLIC_SUPABASE_URL = readPublicEnv("VITE_SUPABASE_URL");
+export const PUBLIC_SUPABASE_PUBLISHABLE_KEY = readPublicEnv("VITE_SUPABASE_PUBLISHABLE_KEY");
+export const PUBLIC_WALLETCONNECT_PROJECT_ID = readPublicEnv("VITE_WALLETCONNECT_PROJECT_ID");
 
 export function getMissingPublicBackendEnv(): PublicEnvName[] {
   return REQUIRED_PUBLIC_BACKEND_ENV.filter((name) => !readPublicEnv(name));
@@ -73,9 +60,7 @@ export function hasPublicBackendEnv(): boolean {
 }
 
 export function getPublicBackendEnvMessage(missing = getMissingPublicBackendEnv()): string {
-  return `Backend configuration needed — restore ${missing.join(
-    ", ",
-  )} in Lovable project settings.`;
+  return `Backend configuration needed. Set ${missing.join(", ")} in the Quorumark environment.`;
 }
 
 export function reportPublicBackendEnvMissingOnce(missing = getMissingPublicBackendEnv()) {

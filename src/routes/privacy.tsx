@@ -3,9 +3,9 @@ import { LegalPage, LegalSection, LegalList } from "@/components/legal/LegalPage
 import { COMPANY_NAME, PRODUCT_NAME, SUPPORT_EMAIL, absoluteUrl } from "@/lib/legal/config";
 
 const CANONICAL = absoluteUrl("/privacy");
-const TITLE = "Privacy Policy — Turtle Bot";
+const TITLE = "Privacy Policy — Quorumark";
 const DESC =
-  "How Turtle Bot collects, uses, retains and deletes personal data, including data received from social login providers.";
+  "How Quorumark collects, uses, retains and deletes personal data for wallet based strategy exchange access.";
 
 export const Route = createFileRoute("/privacy")({
   head: () => ({
@@ -49,10 +49,9 @@ function PrivacyPage() {
               (never the password itself), display name and account creation time.
             </>,
             <>
-              <strong className="text-white/85">Social login data.</strong> When you sign in with a
-              third-party provider we receive the provider user ID, display name, avatar image URL,
-              and email address when the provider supplies one. Some providers do not supply an
-              email address; sign-in still works without it.
+              <strong className="text-white/85">Wallet identity data.</strong> When you connect a
+              wallet we receive the public address, chain, provider name and the signed challenge
+              result needed to establish a session.
             </>,
             <>
               <strong className="text-white/85">Product data.</strong> Simulated (paper) trading
@@ -89,18 +88,18 @@ function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection heading="4. Social login and account linking">
+      <LegalSection heading="4. Wallet authentication and account linking">
         <p>
-          Signing in with a third-party provider means that provider tells us who you are. We
-          receive the fields listed in section 2 and nothing else. We never receive your provider
-          password.
+          Connecting a wallet means that the wallet signs an expiring, domain bound challenge. We
+          receive the public identity fields listed in section 2 and never receive a private key or
+          seed phrase.
         </p>
         <LegalList
           items={[
-            "If the email returned by the provider already belongs to a Turtle Bot account, the social identity is linked to that existing account. We do not create a second account.",
+            "If a verified wallet already belongs to a Quorumark account, the wallet identity is linked to that existing account. We do not create a second account.",
             "Provider access tokens are held server-side only. They are never written to any table that client applications can read.",
-            "Social sign-in never grants live-trading eligibility, paid entitlements, community-admin rights or Onixus admin rights. Those are granted separately and are not affected by how you log in.",
-            "You can disconnect a provider at any time in account settings, and separately revoke Turtle Bot in the provider's own app settings.",
+            "Wallet connection never grants live trading eligibility or paid entitlements. Those are granted separately and are not affected by how you connect.",
+            "You can disconnect a wallet at any time in account settings and revoke Quorumark access from the wallet provider.",
           ]}
         />
       </LegalSection>

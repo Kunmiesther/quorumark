@@ -1,1 +1,0 @@
-{"buildCommand":"echo ARC shadow preview ready","installCommand":"echo No install required","outputDirectory":"public","functions":{"api/review.js":{"maxDuration":60}}}

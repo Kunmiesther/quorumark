@@ -1,6 +1,5 @@
 // Verifies a wallet signature server-side and attaches the wallet to the
 // authenticated user on success.
-// - Requires a valid Turtle Bot JWT.
 // - Looks up the challenge by SHA-256(nonce). Rejects expired/used/mismatched
 //   provider or chain or address.
 // - Verifies the signature with the correct scheme:
@@ -44,17 +43,9 @@ Deno.serve(async (req) => {
   const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!SUPABASE_URL || !SERVICE_ROLE) return fail(500, "CONFIG_ERROR", "Backend is not configured.");
 
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-  if (!token) return fail(401, "UNAUTHENTICATED", "Sign in required.");
-
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data: userData, error: userErr } = await admin.auth.getUser(token);
-  if (userErr || !userData?.user) return fail(401, "UNAUTHENTICATED", "Sign in required.");
-  const userId = userData.user.id;
-
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return fail(400, "INVALID_BODY", "Invalid JSON body."); }
 
@@ -68,13 +59,13 @@ Deno.serve(async (req) => {
   if (!SUPPORTED_PROVIDERS.has(provider)) return fail(400, "UNSUPPORTED_PROVIDER", "Provider is not supported.");
   if (!publicAddress || !signature || !nonceHash) return fail(400, "INVALID_INPUT", "Missing fields.");
 
-  // Look up the challenge (unused, unexpired, owned by caller).
+  // Look up the challenge by its one-time hash.
   const { data: chal } = await admin
     .from("wallet_connection_challenges")
-    .select("id, user_id, provider, chain, public_address, challenge_text, expires_at, used_at")
+    .select("id, provider, chain, public_address, challenge_text, expires_at, used_at")
     .eq("nonce_hash", nonceHash)
     .maybeSingle();
-  if (!chal || chal.user_id !== userId) return fail(404, "CHALLENGE_NOT_FOUND", "Challenge not found.");
+  if (!chal) return fail(404, "CHALLENGE_NOT_FOUND", "Challenge not found.");
   if (chal.used_at) return fail(400, "CHALLENGE_ALREADY_USED", "Challenge already used.");
   if (new Date(chal.expires_at).getTime() < Date.now()) return fail(400, "CHALLENGE_EXPIRED", "Challenge expired.");
   if (chal.provider !== provider) return fail(400, "PROVIDER_MISMATCH", "Provider does not match challenge.");
@@ -96,20 +87,18 @@ Deno.serve(async (req) => {
   const now = new Date().toISOString();
   await admin.from("wallet_connection_challenges").update({ used_at: now }).eq("id", chal.id);
 
-  // Look for an existing row for this (user, chain, address); reactivate or insert.
+  // Look for an existing row for this chain and address; reactivate or insert.
   const { data: existing } = await admin
     .from("wallet_connections")
     .select("id, is_active")
-    .eq("user_id", userId)
     .eq("chain", chain)
     .ilike("public_address", publicAddress)
     .maybeSingle();
 
-  // Decide is_active: activate if the user has no other active wallets.
+  // Keep one active verified wallet per address in this wallet-first identity layer.
   const { count: activeCount } = await admin
     .from("wallet_connections")
     .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
     .eq("is_active", true);
   const shouldActivate = (activeCount ?? 0) === 0;
 
@@ -119,13 +108,10 @@ Deno.serve(async (req) => {
       .from("wallet_connections")
       .update({
         provider,
-        network: "mainnet",
+        network: "testnet",
         label,
         status: "verified",
         verified_at: now,
-        connected_at: now,
-        last_seen_at: now,
-        disconnected_at: null,
         is_active: existing.is_active || shouldActivate,
       })
       .eq("id", existing.id);
@@ -135,16 +121,13 @@ Deno.serve(async (req) => {
     const { data: inserted, error: insErr } = await admin
       .from("wallet_connections")
       .insert({
-        user_id: userId,
         provider,
         public_address: publicAddress,
         chain,
-        network: "mainnet",
+        network: "testnet",
         label,
         status: "verified",
         verified_at: now,
-        connected_at: now,
-        last_seen_at: now,
         is_active: shouldActivate,
       })
       .select("id")

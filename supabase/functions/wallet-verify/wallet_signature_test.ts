@@ -7,7 +7,7 @@ import { privateKeyToAccount, generatePrivateKey } from "https://esm.sh/viem@2.2
 import { verifyWalletSignature } from "../_shared/wallet-signature.ts";
 
 const challengeText = [
-  "Turtle Bot",
+  "Quorumark",
   "Wallet connection request",
   "",
   "Nonce: 0123456789abcdef",

@@ -3,9 +3,9 @@ import { LegalPage, LegalSection, LegalList } from "@/components/legal/LegalPage
 import { COMPANY_NAME, PRODUCT_NAME, SUPPORT_EMAIL, absoluteUrl } from "@/lib/legal/config";
 
 const CANONICAL = absoluteUrl("/terms");
-const TITLE = "Terms of Service — Turtle Bot";
+const TITLE = "Terms of Service — Quorumark";
 const DESC =
-  "The rules for using Turtle Bot: eligibility, invitation-only access, simulated trading, live trading restrictions and acceptable use.";
+  "The rules for using Quorumark Strategy Exchange, including paper execution, wallet access and acceptable use.";
 
 export const Route = createFileRoute("/terms")({
   head: () => ({
@@ -37,11 +37,10 @@ function TermsPage() {
         </p>
       </LegalSection>
 
-      <LegalSection heading="2. Invitation-only access">
+      <LegalSection heading="2. Exchange access">
         <p>
-          Access is currently invitation-only. Creating an account, including through a social login
-          provider, does not by itself grant access to the product. An invitation must be redeemed,
-          and we may decline, limit or withdraw access at our discretion.
+          Marketplace browsing is public. Wallet authentication is required for creator and follower
+          actions, and we may decline, limit or withdraw access at our discretion.
         </p>
       </LegalSection>
 
@@ -54,17 +53,17 @@ function TermsPage() {
         </p>
       </LegalSection>
 
-      <LegalSection heading="4. Live trading">
+      <LegalSection heading="4. Execution environments">
         <p>
-          Live trading against a connected exchange is restricted and is not enabled by signing up
-          or by signing in with a social provider. Where live trading is enabled for an account:
+          Live trading is not enabled in this product assignment. Paper execution and supported testnet
+          flows are separated from any future production environment:
         </p>
         <LegalList
           items={[
             "You remain solely responsible for the exchange account, its funds and its risk settings.",
-            "You authorise Turtle Bot to place, amend and cancel orders on your behalf according to the strategy configuration you select.",
-            "Turtle Bot is non-custodial. It does not hold, receive or withdraw your funds, and withdrawal permissions are not used.",
-            "You can revoke access at any time by disabling the strategy or revoking the API credentials at your exchange.",
+            "You authorise only the paper or testnet action that you explicitly confirm.",
+            "Quorumark is non-custodial. It does not hold, receive or withdraw follower funds.",
+            "You can pause a follower policy or revoke wallet access at any time.",
           ]}
         />
       </LegalSection>

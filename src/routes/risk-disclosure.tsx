@@ -3,7 +3,7 @@ import { LegalPage, LegalSection, LegalList } from "@/components/legal/LegalPage
 import { PRODUCT_NAME, absoluteUrl } from "@/lib/legal/config";
 
 const CANONICAL = absoluteUrl("/risk-disclosure");
-const TITLE = "Risk Disclosure — Turtle Bot";
+const TITLE = "Risk Disclosure — Quorumark";
 const DESC =
   "Plain-language disclosure of the risks of automated and leveraged crypto trading, and the limits of simulated results.";
 
@@ -76,10 +76,9 @@ function RiskDisclosurePage() {
 
       <LegalSection heading="Custody and control">
         <p>
-          {PRODUCT_NAME} is non-custodial: it never holds your funds and does not request or use
-          withdrawal permissions. Your assets stay in your exchange account, and you remain
-          responsible for that account, its security and its risk settings. You can revoke access at
-          any time.
+          {PRODUCT_NAME} is non-custodial: it never holds your funds and the current exchange only
+          produces paper records. Any future testnet or production connector must be explicitly
+          authorized and independently verified.
         </p>
       </LegalSection>
 

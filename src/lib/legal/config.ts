@@ -10,10 +10,10 @@
  * project configuration — they are surfaced in /admin/social-integrations.
  */
 
-export const SITE_URL = "https://turtlebot.app";
+export const SITE_URL = "https://quorumark.example";
 
 /** Legal entity name. Not verified from any project artefact. */
-export const COMPANY_NAME = "Onixus Inc.";
+export const COMPANY_NAME = "Quorumark";
 export const COMPANY_NAME_NEEDS_CONFIRMATION = true;
 
 export const PRODUCT_NAME = "Quorumark";
@@ -23,7 +23,7 @@ export const PRODUCT_NAME = "Quorumark";
  * so this is a single centralised placeholder rather than scattered invented
  * addresses. Replace here and every page updates.
  */
-export const SUPPORT_EMAIL = "support@onixus.xyz";
+export const SUPPORT_EMAIL = "support@quorumark.example";
 export const SUPPORT_EMAIL_NEEDS_CONFIRMATION = true;
 
 export const PRIVACY_EMAIL = SUPPORT_EMAIL;
@@ -44,7 +44,6 @@ export const LEGAL_ROUTES = {
   terms: "/terms",
   dataDeletion: "/data-deletion",
   support: "/support",
-  socialAuth: "/social-auth",
   riskDisclosure: "/risk-disclosure",
 } as const;
 

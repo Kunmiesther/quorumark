@@ -1,1 +1,0 @@
-ALTER TABLE public.paper_wallets ADD COLUMN IF NOT EXISTS last_processed_candle_ts_ms bigint;

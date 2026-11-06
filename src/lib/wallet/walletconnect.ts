@@ -52,9 +52,9 @@ async function initProvider(): Promise<Cached> {
     chains: DEFAULT_EVM_CHAINS,
     showQrModal: true,
     metadata: {
-      name: "Turtle Bot",
-      description: "Turtle Bot wallet verification",
-      url: typeof window !== "undefined" ? window.location.origin : "https://turtle.local",
+      name: "Quorumark Strategy Exchange",
+      description: "Wallet authentication for Quorumark",
+      url: typeof window !== "undefined" ? window.location.origin : "https://quorumark.example",
       icons: [],
     },
   })) as Eip1193Like;

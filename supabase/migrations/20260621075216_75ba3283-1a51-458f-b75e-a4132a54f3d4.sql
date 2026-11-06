@@ -1,1 +1,0 @@
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS target_budget_items JSONB NOT NULL DEFAULT '{}'::jsonb;

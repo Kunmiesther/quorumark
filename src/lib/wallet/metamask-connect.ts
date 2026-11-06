@@ -19,10 +19,10 @@ async function getClient(): Promise<MetaMaskClient> {
       .then(({ createEVMClient }) =>
         createEVMClient({
           dapp: {
-            name: "TurtleBot",
+            name: "Quorumark Strategy Exchange",
             url:
-              typeof window === "undefined" ? "https://www.turtlebot.app" : window.location.origin,
-            iconUrl: "https://www.turtlebot.app/brand/turtlebot-app-icon-1024.png",
+              typeof window === "undefined" ? "https://quorumark.example" : window.location.origin,
+            iconUrl: typeof window === "undefined" ? undefined : `${window.location.origin}/favicon.svg`,
           },
           api: {
             supportedNetworks: {

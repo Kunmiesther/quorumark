@@ -1,1 +1,0 @@
-ALTER TABLE public.paper_positions ADD COLUMN IF NOT EXISTS onyx_rationale text;

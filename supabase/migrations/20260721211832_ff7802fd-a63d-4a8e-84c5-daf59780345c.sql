@@ -1,1 +1,0 @@
-DO $$ BEGIN PERFORM cron.unschedule('paper-tick-every-minute'); EXCEPTION WHEN OTHERS THEN NULL; END $$;

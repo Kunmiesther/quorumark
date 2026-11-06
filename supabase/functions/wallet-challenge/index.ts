@@ -1,6 +1,5 @@
 // Issues a single-use, short-TTL signing challenge that a user's wallet
 // must sign to prove ownership of a public address.
-// - Requires an authenticated Turtle Bot session (JWT verified).
 // - Stores only SHA-256(nonce), never the raw nonce.
 // - Never returns anything about other users' challenges.
 // - Signing this challenge does NOT authorize any transaction or transfer.
@@ -53,17 +52,9 @@ Deno.serve(async (req) => {
     return fail(500, "CONFIG_ERROR", "Backend is not configured.");
   }
 
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-  if (!token) return fail(401, "UNAUTHENTICATED", "Sign in required.");
-
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data: userData, error: userErr } = await admin.auth.getUser(token);
-  if (userErr || !userData?.user) return fail(401, "UNAUTHENTICATED", "Sign in required.");
-  const userId = userData.user.id;
-
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -94,8 +85,8 @@ Deno.serve(async (req) => {
   const expiresAt = new Date(issuedAt.getTime() + CHALLENGE_TTL_SECONDS * 1000);
 
   const challengeText = [
-    "Turtle Bot",
-    "Wallet connection request",
+    "Quorumark",
+    "Wallet authentication request",
     "",
     "By signing this message you prove ownership of the wallet below.",
     "This signature does NOT authorize any transaction, transfer, or spend.",
@@ -109,7 +100,6 @@ Deno.serve(async (req) => {
   ].join("\n");
 
   const { error: insErr } = await admin.from("wallet_connection_challenges").insert({
-    user_id: userId,
     provider,
     chain,
     public_address: publicAddress,

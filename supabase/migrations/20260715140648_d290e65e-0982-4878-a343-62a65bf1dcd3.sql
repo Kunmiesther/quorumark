@@ -1,1 +1,0 @@
-ALTER TYPE public.connection_status ADD VALUE IF NOT EXISTS 'paused';

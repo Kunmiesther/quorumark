@@ -1,2 +1,0 @@
-ALTER TABLE public.worker_commands DROP CONSTRAINT worker_commands_command_check;
-ALTER TABLE public.worker_commands ADD CONSTRAINT worker_commands_command_check CHECK (command IN ('test_order','strategy_test'));
