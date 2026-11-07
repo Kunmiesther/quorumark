@@ -94,11 +94,27 @@ def publish_strategy(strategy_id: str, identity: str = Depends(require_local_ide
 
 
 @app.get("/v1/strategies/{strategy_id}/versions")
-def strategy_versions(strategy_id: str) -> list[dict[str, object]]:
+def strategy_versions(strategy_id: str, identity: str = Depends(require_local_identity)) -> list[dict[str, object]]:
     strategy = repository.get_strategy(strategy_id)
     if not strategy or strategy["status"] != "published":
         raise HTTPException(status_code=404, detail="Published strategy not found")
-    return repository.list_versions(strategy["id"])
+    if strategy.get("creator_id") != identity:
+        entitled = next(
+            (
+                item
+                for item in repository.list_subscriptions(identity)
+                if item.get("strategy_id") == strategy["id"]
+                and item.get("status") == "active"
+                and (not item.get("expires_at") or item["expires_at"] > datetime.now(timezone.utc).isoformat())
+            ),
+            None,
+        )
+        if not entitled:
+            raise HTTPException(status_code=403, detail="Active subscription required")
+    versions = repository.list_versions(strategy["id"])
+    if strategy.get("creator_id") == identity:
+        return versions
+    return [{key: value for key, value in version.items() if key != "definition"} for version in versions]
 
 
 @app.post("/v1/subscriptions", status_code=201)
@@ -119,6 +135,14 @@ def subscribe(request: SubscriptionRequest, identity: str = Depends(require_loca
 @app.get("/v1/subscriptions/me")
 def subscriptions(identity: str = Depends(require_local_identity)) -> list[dict[str, object]]:
     return repository.list_subscriptions(identity)
+
+
+@app.post("/v1/subscriptions/{strategy_id}/cancel")
+def cancel_subscription(strategy_id: str, identity: str = Depends(require_local_identity)) -> dict[str, object]:
+    result = repository.cancel_subscription(strategy_id, identity)
+    if not result:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    return result
 
 
 @app.put("/v1/follower/policy")

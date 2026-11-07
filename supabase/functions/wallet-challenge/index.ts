@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
   if (chain === "solana" && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(publicAddress)) {
     return fail(400, "INVALID_ADDRESS", "Invalid Solana address.");
   }
-  if (chain !== "solana" && !/^0x[0-9a-fA-F]{40}$/.test(publicAddress)) {
+  if (chain !== "near" && chain !== "solana" && !/^0x[0-9a-fA-F]{40}$/.test(publicAddress)) {
     return fail(400, "INVALID_ADDRESS", "Invalid EVM address.");
   }
 

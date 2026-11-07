@@ -20,7 +20,10 @@ class SupabaseRepository:
         self.key = os.getenv("QUORUMARK_SUPABASE_SECRET_KEY", "")
         if not self.url or not self.key or not self.key.startswith(("sb_secret_", "eyJ")):
             raise RuntimeError("QUORUMARK_SUPABASE_URL and a server-only Supabase secret key are required")
-        self.client = httpx.Client(timeout=20, headers={"apikey": self.key, "Accept": "application/json"})
+        headers = {"apikey": self.key, "Accept": "application/json"}
+        if self.key.startswith("eyJ"):
+            headers["Authorization"] = f"Bearer {self.key}"
+        self.client = httpx.Client(timeout=20, headers=headers)
 
     def _request(self, method: str, table: str, *, params: dict[str, str] | None = None, body: Any = None, prefer: str | None = None) -> list[dict[str, Any]]:
         headers = {"Content-Type": "application/json"}
@@ -94,6 +97,16 @@ class SupabaseRepository:
 
     def list_subscriptions(self, follower_id: str) -> list[dict[str, Any]]:
         return self._request("GET", "strategy_exchange_subscriptions", params={"follower_id": f"eq.{follower_id}", "select": "*", "order": "created_at.desc"})
+
+    def cancel_subscription(self, strategy_id: str, follower_id: str) -> dict[str, Any] | None:
+        rows = self._request(
+            "PATCH",
+            "strategy_exchange_subscriptions",
+            params={"strategy_id": f"eq.{strategy_id}", "follower_id": f"eq.{follower_id}"},
+            body={"status": "cancelled", "cancelled_at": datetime.now(timezone.utc).isoformat()},
+            prefer="return=representation",
+        )
+        return rows[0] if rows else None
 
     def save_policy(self, follower_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         body = {"follower_id": follower_id, "capital": payload["capital"], "max_trade": payload["max_trade"], "max_position": payload["max_position"], "max_loss": payload["max_loss"], "max_slippage_bps": payload["max_slippage_bps"], "approved_assets": payload["approved_assets"], "paused": payload["paused"]}

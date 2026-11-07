@@ -161,7 +161,24 @@ class PaperRepository:
         record = {"id": "sub_" + uuid.uuid4().hex[:20], "strategy_id": strategy_id, "follower_id": follower_id, "status": "active", "environment": environment, "created_at": utc_now(), "cancelled_at": None}
         with self._connect() as db:
             db.execute("insert into subscriptions values (?, ?, ?, ?, ?, ?, ?)", tuple(record.values()))
-        return record
+            return record
+
+    def cancel_subscription(self, strategy_id: str, follower_id: str) -> dict[str, Any] | None:
+        with self._connect() as db:
+            row = db.execute(
+                "select * from subscriptions where strategy_id = ? and follower_id = ?",
+                (strategy_id, follower_id),
+            ).fetchone()
+            if not row:
+                return None
+            cancelled_at = utc_now()
+            db.execute(
+                "update subscriptions set status = 'cancelled', cancelled_at = ? where strategy_id = ? and follower_id = ?",
+                (cancelled_at, strategy_id, follower_id),
+            )
+        result = dict(row)
+        result.update(status="cancelled", cancelled_at=cancelled_at)
+        return result
 
     def list_subscriptions(self, follower_id: str) -> list[dict[str, Any]]:
         with self._connect() as db:

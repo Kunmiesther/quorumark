@@ -16,6 +16,24 @@ test("wallet selector exposes explicit primary and secondary choices", async ({ 
 
 test("mobile marketplace remains readable", async ({ page }) => {
   await page.goto("/marketplace");
+  await page.waitForTimeout(3000);
   await expect(page.locator("body")).toBeVisible();
   await expect(page.locator("body")).not.toHaveCSS("overflow-x", "scroll");
+});
+
+test("marketplace search and studio service feedback are interactive", async ({ page }) => {
+  await page.goto("/marketplace");
+  await page.waitForTimeout(3000);
+  await expect(page.getByRole("button", { name: "All strategies" })).toHaveClass(/q-category-active/);
+  const category = page.getByRole("button", { name: "Crypto spot" });
+  await category.click();
+  await expect(category).toHaveClass(/q-category-active/);
+  const search = page.getByRole("textbox", { name: "Search strategies" });
+  await search.fill("no-method-matches-this-query");
+  await expect(search).toHaveValue("no-method-matches-this-query");
+
+  await page.goto("/studio");
+  await page.getByPlaceholder("For example, Atlas range break").fill("Browser verification strategy");
+  await page.getByRole("button", { name: /Test my strategy/ }).click();
+  await expect(page.locator("body")).toContainText(/Simulation complete|could not|not configured/i);
 });

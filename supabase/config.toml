@@ -1,5 +1,5 @@
 # Set this to the Quorumark-owned Supabase project id when deploying.
-project_id = "quorumark-local"
+project_id = "btyweuexcrgntswawafu"
 
 [functions.wallet-challenge]
 verify_jwt = false
