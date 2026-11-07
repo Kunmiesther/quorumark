@@ -3,7 +3,6 @@
 import { ed25519 } from "https://esm.sh/@noble/curves@1.6.0/ed25519";
 import bs58 from "https://esm.sh/bs58@6.0.0";
 import { verifyMessage } from "https://esm.sh/viem@2.21.19";
-import { serializeNep413 } from "https://esm.sh/@near-wallet-selector/core@10.1.4";
 
 export const EVM_CHAINS = new Set([
   "ethereum",
@@ -13,6 +12,20 @@ export const EVM_CHAINS = new Set([
   "optimism",
   "bsc",
 ]);
+
+function u32(value: number): Uint8Array {
+  return new Uint8Array([value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff]);
+}
+
+function borshString(value: string): Uint8Array {
+  const bytes = new TextEncoder().encode(value);
+  return new Uint8Array([...u32(bytes.length), ...bytes]);
+}
+
+/** NEP-413 Borsh payload; kept local so the edge verifier has no browser SDK dependency. */
+function serializeNep413(message: string, nonce: Uint8Array, recipient: string): Uint8Array {
+  return new Uint8Array([...u32(2147484061), ...borshString(message), ...nonce, ...borshString(recipient), 0]);
+}
 
 export function hexToBytes(hex: string): Uint8Array {
   const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
@@ -58,7 +71,7 @@ export async function verifyWalletSignature(params: {
       const nonceLine = challengeText.split("\n").find((line) => line.startsWith("Nonce: "))?.slice(7).trim();
       const nonce = nonceLine ? hexToBytes(nonceLine) : new Uint8Array();
       if (nonce.length !== 32) return { ok: false, code: "INVALID_NONCE", message: "NEAR challenge nonce is invalid." };
-      const payload = serializeNep413({ message: challengeText, recipient, nonce: Buffer.from(nonce) });
+      const payload = serializeNep413(challengeText, nonce, recipient);
       const pub = bs58.decode(publicKey.slice("ed25519:".length));
       const sig = bs58.decode(signature);
       if (pub.length !== 32 || sig.length !== 64 || !ed25519.verify(sig, payload, pub)) return { ok: false, code: "INVALID_SIGNATURE", message: "Signature did not match NEAR wallet." };

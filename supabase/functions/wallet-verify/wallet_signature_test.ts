@@ -15,6 +15,13 @@ const challengeText = [
   "Expires: 2026-07-14T00:05:00.000Z",
 ].join("\n");
 
+function nearPayload(message: string, nonce: Uint8Array, recipient: string): Uint8Array {
+  const encoder = new TextEncoder();
+  const u32 = (value: number) => new Uint8Array([value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff]);
+  const string = (value: string) => { const bytes = encoder.encode(value); return new Uint8Array([...u32(bytes.length), ...bytes]); };
+  return new Uint8Array([...u32(2147484061), ...string(message), ...nonce, ...string(recipient), 0]);
+}
+
 // ---------- Solana / ed25519 ----------
 Deno.test("solana: valid ed25519 signature accepted", async () => {
   const priv = ed25519.utils.randomPrivateKey();
@@ -76,7 +83,8 @@ Deno.test("evm: valid personal_sign signature accepted", async () => {
 Deno.test("evm: tampered signature rejected", async () => {
   const account = privateKeyToAccount(generatePrivateKey());
   const signature = await account.signMessage({ message: challengeText });
-  const tampered = signature.slice(0, -2) + (signature.endsWith("00") ? "01" : "00");
+  const firstByte = signature.slice(2, 4);
+  const tampered = `${signature.slice(0, 2)}${firstByte === "00" ? "01" : "00"}${signature.slice(4)}`;
   const res = await verifyWalletSignature({
     chain: "ethereum",
     publicAddress: account.address,
@@ -96,6 +104,29 @@ Deno.test("evm: signer ≠ bound address rejected", async () => {
     signature,
     challengeText,
   });
+  assertEquals(res.ok, false);
+});
+
+Deno.test("near: valid NEP-413 signature accepted", async () => {
+  const priv = ed25519.utils.randomPrivateKey();
+  const pub = ed25519.getPublicKey(priv);
+  const nonce = new Uint8Array(32);
+  nonce.fill(7);
+  const message = `Quorumark\nNonce: ${Array.from(nonce).map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  const payload = nearPayload(message, nonce, "app.example");
+  const signature = bs58.encode(ed25519.sign(payload, priv));
+  const res = await verifyWalletSignature({ chain: "near", publicAddress: "alice.testnet", publicKey: `ed25519:${bs58.encode(pub)}`, signature, challengeText: message, recipient: "app.example" });
+  assertEquals(res.ok, true);
+});
+
+Deno.test("near: tampered NEP-413 signature rejected", async () => {
+  const priv = ed25519.utils.randomPrivateKey();
+  const pub = ed25519.getPublicKey(priv);
+  const nonce = new Uint8Array(32);
+  const message = `Quorumark\nNonce: ${Array.from(nonce).map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  const signature = ed25519.sign(nearPayload(message, nonce, "app.example"), priv);
+  signature[0] ^= 1;
+  const res = await verifyWalletSignature({ chain: "near", publicAddress: "alice.testnet", publicKey: `ed25519:${bs58.encode(pub)}`, signature: bs58.encode(signature), challengeText: message, recipient: "app.example" });
   assertEquals(res.ok, false);
 });
 

@@ -33,14 +33,14 @@ export async function showNearWalletSelector(): Promise<string> {
     description: "Choose a NEAR wallet to authenticate with Quorumark.",
   });
   return new Promise((resolve, reject) => {
-    let subscription: { unsubscribe: () => void } | undefined;
+    let subscription: { remove: () => void } | undefined;
     const timeout = window.setTimeout(() => {
-      subscription?.unsubscribe();
+      subscription?.remove();
       reject(new Error("NEAR wallet selection timed out."));
     }, 120_000);
     subscription = selector.on("signedIn", ({ accounts }) => {
       window.clearTimeout(timeout);
-      subscription?.unsubscribe();
+      subscription?.remove();
       const account = accounts[0]?.accountId;
       if (account) resolve(account);
       else reject(new Error("NEAR wallet did not return an account."));

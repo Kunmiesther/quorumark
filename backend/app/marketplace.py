@@ -61,7 +61,7 @@ def slugify(value: str) -> str:
 
 
 def create_strategy(repository: PaperRepository, creator_id: str, request: StrategyDraftRequest) -> dict[str, Any]:
-    strategy_id = "strat_" + uuid.uuid4().hex[:20]
+    strategy_id = str(uuid.uuid4())
     slug = f"{slugify(request.name)}-{strategy_id[-6:]}"
     strategy = {
         "id": strategy_id,

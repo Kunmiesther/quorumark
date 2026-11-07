@@ -9,6 +9,7 @@ from .engine import run_reference_backtest
 from .models import AgentEvaluationRequest, AgentEvaluationResponse, BacktestRequest, BacktestResponse, PaperExecutionRequest, PaperExecutionResponse
 from .paper import process_paper_signal
 from .repository import PaperRepository
+from .supabase_repository import SupabaseRepository
 from .security import require_verified_identity
 from .marketplace import (
     PolicyRequest,
@@ -28,11 +29,10 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["content-type"],
 )
-if os.getenv("QUORUMARK_PYTHON_ENVIRONMENT", "local").lower() != "local":
-    raise RuntimeError(
-        "Hosted Quorumark requires the Supabase repository adapter; refusing to fall back to SQLite."
-    )
-repository = PaperRepository()
+if os.getenv("QUORUMARK_PYTHON_ENVIRONMENT", "local").lower() == "local":
+    repository = PaperRepository()
+else:
+    repository = SupabaseRepository()
 
 
 @app.get("/health")
@@ -49,9 +49,7 @@ def reference_backtest(request: BacktestRequest) -> BacktestResponse:
 
 @app.post("/v1/paper/executions", response_model=PaperExecutionResponse)
 def paper_execution(request: PaperExecutionRequest, identity: str = Depends(require_verified_identity)) -> PaperExecutionResponse:
-    if request.follower_id != identity:
-        raise HTTPException(status_code=403, detail="Follower identity does not match the verified session")
-    return process_paper_signal(request, repository)
+    return process_paper_signal(request.model_copy(update={"follower_id": identity}), repository)
 
 
 @app.get("/v1/paper/executions")

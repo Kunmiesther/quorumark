@@ -33,6 +33,24 @@ function fail(status: number, code: string, message: string) {
   return json(status, { ok: false, code, message });
 }
 
+async function identityEmail(chain: string, address: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${chain}:${address.toLowerCase()}`));
+  const hex = Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `wallet-${hex}@auth.quorumark.local`;
+}
+
+function serviceRoleKey(): string | undefined {
+  const legacy = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (legacy) return legacy;
+  const raw = Deno.env.get("SUPABASE_SECRET_KEYS");
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as { default?: unknown };
+    return typeof parsed.default === "string" ? parsed.default : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 
 Deno.serve(async (req) => {
@@ -40,7 +58,7 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return fail(405, "METHOD_NOT_ALLOWED", "POST required.");
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-  const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const SERVICE_ROLE = serviceRoleKey();
   if (!SUPABASE_URL || !SERVICE_ROLE) return fail(500, "CONFIG_ERROR", "Backend is not configured.");
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
@@ -63,7 +81,7 @@ Deno.serve(async (req) => {
   // Look up the challenge by its one-time hash.
   const { data: chal } = await admin
     .from("wallet_connection_challenges")
-    .select("id, provider, chain, public_address, challenge_text, expires_at, used_at")
+    .select("id, provider, chain, public_address, challenge_text, expires_at, used_at, recipient")
     .eq("nonce_hash", nonceHash)
     .maybeSingle();
   if (!chal) return fail(404, "CHALLENGE_NOT_FOUND", "Challenge not found.");
@@ -86,18 +104,39 @@ Deno.serve(async (req) => {
   });
   if (!vres.ok) return fail(400, vres.code, vres.message);
 
-  // Single-use: mark challenge consumed before writing the wallet row.
   const now = new Date().toISOString();
-  const { data: consumed } = await admin.from("wallet_connection_challenges").update({ used_at: now }).eq("id", chal.id).is("used_at", null).select("id");
-  if (!consumed?.length) return fail(400, "CHALLENGE_ALREADY_USED", "Challenge already used.");
-
   // Look for an existing row for this chain and address; reactivate or insert.
   const { data: existing } = await admin
     .from("wallet_connections")
-    .select("id, is_active")
+    .select("id, is_active, user_id")
     .eq("chain", chain)
     .ilike("public_address", publicAddress)
     .maybeSingle();
+
+  const { data: identity } = await admin
+    .from("wallet_identities")
+    .select("user_id")
+    .eq("chain", chain)
+    .ilike("public_address", publicAddress)
+    .maybeSingle();
+  let userId = existing?.user_id ?? identity?.user_id ?? null;
+  if (!userId) {
+    const email = await identityEmail(chain, publicAddress);
+    const { data: created, error: createUserError } = await admin.auth.admin.createUser({
+      email,
+      email_confirm: true,
+      user_metadata: { wallet_chain: chain, wallet_address: publicAddress },
+      app_metadata: { auth_method: "wallet" },
+    });
+    if (createUserError || !created.user) return fail(500, "IDENTITY_CREATE_FAILED", "Could not create the Quorumark wallet identity.");
+    userId = created.user.id;
+    const { error: identityError } = await admin.from("wallet_identities").insert({ user_id: userId, chain, public_address: publicAddress });
+    if (identityError) return fail(500, "IDENTITY_LINK_FAILED", "Could not link the wallet identity.");
+  }
+
+  // Single-use: consume only after signature and identity binding succeed.
+  const { data: consumed } = await admin.from("wallet_connection_challenges").update({ used_at: now }).eq("id", chal.id).is("used_at", null).select("id");
+  if (!consumed?.length) return fail(400, "CHALLENGE_ALREADY_USED", "Challenge already used.");
 
   // Keep one active verified wallet per address in this wallet-first identity layer.
   const { count: activeCount } = await admin
@@ -112,6 +151,7 @@ Deno.serve(async (req) => {
       .from("wallet_connections")
       .update({
         provider,
+        user_id: userId,
         network: "testnet",
         label,
         status: "verified",
@@ -126,6 +166,7 @@ Deno.serve(async (req) => {
       .from("wallet_connections")
       .insert({
         provider,
+        user_id: userId,
         public_address: publicAddress,
         chain,
         network: "testnet",
@@ -143,7 +184,7 @@ Deno.serve(async (req) => {
   const secret = Deno.env.get("QUORUMARK_SESSION_SECRET");
   if (!secret) return fail(500, "CONFIG_ERROR", "Session signing is not configured.");
   const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" })).replaceAll("=", "").replaceAll("+", "-").replaceAll("/", "_");
-  const payload = btoa(JSON.stringify({ sub: publicAddress, chain, aud: "quorumark", iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 })).replaceAll("=", "").replaceAll("+", "-").replaceAll("/", "_");
+  const payload = btoa(JSON.stringify({ sub: userId, wallet_address: publicAddress, chain, aud: "quorumark", iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 })).replaceAll("=", "").replaceAll("+", "-").replaceAll("/", "_");
   const input = `${header}.${payload}`;
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(input));
