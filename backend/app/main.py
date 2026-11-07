@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -8,6 +9,7 @@ from .engine import run_reference_backtest
 from .models import AgentEvaluationRequest, AgentEvaluationResponse, BacktestRequest, BacktestResponse, PaperExecutionRequest, PaperExecutionResponse
 from .paper import process_paper_signal
 from .repository import PaperRepository
+from .security import require_verified_identity
 from .marketplace import (
     PolicyRequest,
     StrategyDraftRequest,
@@ -26,6 +28,10 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["content-type"],
 )
+if os.getenv("QUORUMARK_PYTHON_ENVIRONMENT", "local").lower() != "local":
+    raise RuntimeError(
+        "Hosted Quorumark requires the Supabase repository adapter; refusing to fall back to SQLite."
+    )
 repository = PaperRepository()
 
 
@@ -42,13 +48,15 @@ def reference_backtest(request: BacktestRequest) -> BacktestResponse:
 
 
 @app.post("/v1/paper/executions", response_model=PaperExecutionResponse)
-def paper_execution(request: PaperExecutionRequest) -> PaperExecutionResponse:
+def paper_execution(request: PaperExecutionRequest, identity: str = Depends(require_verified_identity)) -> PaperExecutionResponse:
+    if request.follower_id != identity:
+        raise HTTPException(status_code=403, detail="Follower identity does not match the verified session")
     return process_paper_signal(request, repository)
 
 
-@app.get("/v1/paper/executions/{follower_id}")
-def paper_executions(follower_id: str) -> list[dict[str, object]]:
-    return repository.list_executions(follower_id)
+@app.get("/v1/paper/executions")
+def paper_executions(identity: str = Depends(require_verified_identity)) -> list[dict[str, object]]:
+    return repository.list_executions(identity)
 
 
 @app.get("/v1/strategies")

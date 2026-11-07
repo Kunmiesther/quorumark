@@ -15,7 +15,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { verifyWalletSignature } from "../_shared/wallet-signature.ts";
 
-const SUPPORTED_PROVIDERS = new Set(["phantom", "coinbase", "bitget", "walletconnect", "metamask", "trust", "rainbow"]);
+const SUPPORTED_PROVIDERS = new Set(["near-wallet-selector", "phantom", "coinbase", "bitget", "walletconnect", "metamask", "trust", "rainbow"]);
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -53,6 +53,7 @@ Deno.serve(async (req) => {
   const chain = String(body.chain ?? "").toLowerCase();
   const publicAddress = String(body.public_address ?? "").trim();
   const signature = String(body.signature ?? "");
+  const publicKey = String(body.public_key ?? "");
   const nonceHash = String(body.nonce_hash ?? "");
   const label = typeof body.label === "string" ? body.label.trim().slice(0, 40) : null;
 
@@ -80,12 +81,15 @@ Deno.serve(async (req) => {
     publicAddress,
     signature,
     challengeText: chal.challenge_text,
+    publicKey,
+    recipient: chal.recipient ?? new URL(SUPABASE_URL).hostname,
   });
   if (!vres.ok) return fail(400, vres.code, vres.message);
 
   // Single-use: mark challenge consumed before writing the wallet row.
   const now = new Date().toISOString();
-  await admin.from("wallet_connection_challenges").update({ used_at: now }).eq("id", chal.id);
+  const { data: consumed } = await admin.from("wallet_connection_challenges").update({ used_at: now }).eq("id", chal.id).is("used_at", null).select("id");
+  if (!consumed?.length) return fail(400, "CHALLENGE_ALREADY_USED", "Challenge already used.");
 
   // Look for an existing row for this chain and address; reactivate or insert.
   const { data: existing } = await admin
@@ -136,5 +140,13 @@ Deno.serve(async (req) => {
     connectionId = inserted.id;
   }
 
-  return json(200, { ok: true, connection_id: connectionId, status: "verified" });
+  const secret = Deno.env.get("QUORUMARK_SESSION_SECRET");
+  if (!secret) return fail(500, "CONFIG_ERROR", "Session signing is not configured.");
+  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" })).replaceAll("=", "").replaceAll("+", "-").replaceAll("/", "_");
+  const payload = btoa(JSON.stringify({ sub: publicAddress, chain, aud: "quorumark", iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 })).replaceAll("=", "").replaceAll("+", "-").replaceAll("/", "_");
+  const input = `${header}.${payload}`;
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(input));
+  const token = btoa(String.fromCharCode(...new Uint8Array(mac))).replaceAll("=", "").replaceAll("+", "-").replaceAll("/", "_");
+  return json(200, { ok: true, connection_id: connectionId, status: "verified", session_token: `${input}.${token}`, expires_at: new Date(Date.now() + 3600_000).toISOString() });
 });

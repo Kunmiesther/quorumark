@@ -6,8 +6,8 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-const SUPPORTED_PROVIDERS = new Set(["phantom", "coinbase", "bitget", "walletconnect", "metamask", "trust", "rainbow"]);
-const SUPPORTED_CHAINS = new Set(["solana", "ethereum", "base", "polygon", "arbitrum", "optimism", "bsc"]);
+const SUPPORTED_PROVIDERS = new Set(["near-wallet-selector", "phantom", "coinbase", "bitget", "walletconnect", "metamask", "trust", "rainbow"]);
+const SUPPORTED_CHAINS = new Set(["near", "solana", "ethereum", "base", "polygon", "arbitrum", "optimism", "bsc"]);
 const CHALLENGE_TTL_SECONDS = 5 * 60;
 
 const corsHeaders = {
@@ -72,6 +72,9 @@ Deno.serve(async (req) => {
   if (!SUPPORTED_CHAINS.has(chain)) {
     return fail(400, "UNSUPPORTED_CHAIN", "Chain is not supported.");
   }
+  if (chain === "near" && !/^[a-z0-9._-]{2,64}$/.test(publicAddress)) {
+    return fail(400, "INVALID_ADDRESS", "Invalid NEAR testnet account.");
+  }
   if (chain === "solana" && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(publicAddress)) {
     return fail(400, "INVALID_ADDRESS", "Invalid Solana address.");
   }
@@ -84,6 +87,7 @@ Deno.serve(async (req) => {
   const issuedAt = new Date();
   const expiresAt = new Date(issuedAt.getTime() + CHALLENGE_TTL_SECONDS * 1000);
 
+  const recipient = new URL(Deno.env.get("QUORUMARK_APP_URL") ?? SUPABASE_URL).hostname;
   const challengeText = [
     "Quorumark",
     "Wallet authentication request",
@@ -97,6 +101,7 @@ Deno.serve(async (req) => {
     `Nonce: ${nonce}`,
     `Issued: ${issuedAt.toISOString()}`,
     `Expires: ${expiresAt.toISOString()}`,
+    `Recipient: ${recipient}`,
   ].join("\n");
 
   const { error: insErr } = await admin.from("wallet_connection_challenges").insert({
@@ -106,6 +111,8 @@ Deno.serve(async (req) => {
     nonce_hash: nonceHash,
     challenge_text: challengeText,
     expires_at: expiresAt.toISOString(),
+    recipient,
+    network: chain === "near" ? "testnet" : "testnet",
   });
   if (insErr) return fail(500, "INSERT_FAILED", "Could not create challenge.");
 
@@ -114,5 +121,7 @@ Deno.serve(async (req) => {
     challenge_text: challengeText,
     expires_at: expiresAt.toISOString(),
     nonce_hash: nonceHash,
+    nonce,
+    recipient,
   });
 });

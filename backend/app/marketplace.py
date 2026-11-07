@@ -6,31 +6,19 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import Header, HTTPException
+from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
 from .contracts import evidence_hash
 from .repository import PaperRepository
+from .security import require_verified_identity
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def require_local_identity(identity: str | None = Header(default=None, alias="x-quorumark-identity")) -> str:
-    """Require an explicit local development identity.
-
-    This is deliberately not a wallet-auth substitute. The Python service only enables
-    this header-based adapter when QUORUMARK_PYTHON_ENVIRONMENT=local. Hosted deployments
-    must replace it with a verified Supabase session before enabling protected writes.
-    """
-    environment = os.getenv("QUORUMARK_PYTHON_ENVIRONMENT", "local").lower()
-    if environment != "local":
-        raise HTTPException(status_code=503, detail="Protected marketplace writes require a verified application session")
-    value = (identity or "").strip()
-    if not value or len(value) > 160:
-        raise HTTPException(status_code=401, detail="Authenticated wallet identity required")
-    return value
+require_local_identity = require_verified_identity
 
 
 class StrategyDraftRequest(BaseModel):

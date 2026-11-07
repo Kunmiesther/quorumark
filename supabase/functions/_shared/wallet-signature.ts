@@ -3,6 +3,7 @@
 import { ed25519 } from "https://esm.sh/@noble/curves@1.6.0/ed25519";
 import bs58 from "https://esm.sh/bs58@6.0.0";
 import { verifyMessage } from "https://esm.sh/viem@2.21.19";
+import { serializeNep413 } from "https://esm.sh/@near-wallet-selector/core@10.1.4";
 
 export const EVM_CHAINS = new Set([
   "ethereum",
@@ -47,9 +48,23 @@ export async function verifyWalletSignature(params: {
   publicAddress: string;
   signature: string;
   challengeText: string;
+  publicKey?: string;
+  recipient?: string;
 }): Promise<VerifyResult> {
-  const { chain, publicAddress, signature, challengeText } = params;
+  const { chain, publicAddress, signature, challengeText, publicKey, recipient } = params;
   try {
+    if (chain === "near") {
+      if (!publicKey?.startsWith("ed25519:") || !recipient) return { ok: false, code: "INVALID_PUBLIC_KEY", message: "NEAR public key is required." };
+      const nonceLine = challengeText.split("\n").find((line) => line.startsWith("Nonce: "))?.slice(7).trim();
+      const nonce = nonceLine ? hexToBytes(nonceLine) : new Uint8Array();
+      if (nonce.length !== 32) return { ok: false, code: "INVALID_NONCE", message: "NEAR challenge nonce is invalid." };
+      const payload = serializeNep413({ message: challengeText, recipient, nonce: Buffer.from(nonce) });
+      const pub = bs58.decode(publicKey.slice("ed25519:".length));
+      const sig = bs58.decode(signature);
+      if (pub.length !== 32 || sig.length !== 64 || !ed25519.verify(sig, payload, pub)) return { ok: false, code: "INVALID_SIGNATURE", message: "Signature did not match NEAR wallet." };
+      if (publicAddress.length < 2) return { ok: false, code: "INVALID_ADDRESS", message: "Invalid NEAR account." };
+      return { ok: true };
+    }
     if (chain === "solana") {
       const pubKey = bs58.decode(publicAddress);
       if (pubKey.length !== 32) {

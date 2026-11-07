@@ -21,6 +21,17 @@ def test_backtest_api_validates_and_returns_metrics():
     assert "equity_curve" in body and "performance" in body
 
 
+def test_protected_marketplace_rejects_missing_verified_session():
+    response = TestClient(app).post("/v1/strategies", json={
+        "name": "Unauthenticated",
+        "thesis": "This request must never be accepted without a verified session.",
+        "market": "Crypto spot",
+        "supported_assets": ["BTC"],
+        "risk_class": "low",
+    })
+    assert response.status_code == 401
+
+
 def test_local_marketplace_creator_lifecycle_is_owner_scoped(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(main, "repository", PaperRepository(str(tmp_path / "marketplace.db")))
     client = TestClient(app)

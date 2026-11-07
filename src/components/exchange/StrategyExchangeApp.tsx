@@ -225,27 +225,12 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
   useEffect(() => {
     if (view !== "verification" || !PUBLIC_PYTHON_BACKEND_URL) return;
     const follower = state.wallet ?? "demo-follower";
-    fetch(
-      `${PUBLIC_PYTHON_BACKEND_URL.replace(/\/$/, "")}/v1/paper/executions/${encodeURIComponent(follower)}`,
-    )
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`The activity record returned HTTP ${response.status}`);
-        return response.json();
-      })
+    quorumarkApi<Array<{
+      execution?: { price: number; realized_pnl: number; fee: number; timestamp: string; side: string; notional: number };
+      execution_id?: string;
+    }>>("/v1/paper/executions")
       .then(
-        (
-          records: Array<{
-            execution?: {
-              price: number;
-              realized_pnl: number;
-              fee: number;
-              timestamp: string;
-              side: string;
-              notional: number;
-            };
-            execution_id?: string;
-          }>,
-        ) => {
+        (records) => {
           const executions = records
             .filter((record) => record.execution)
             .map((record) => ({
@@ -358,11 +343,8 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
     }
     setProviderBusy(true);
     try {
-      const response = await fetch(
-        `${PUBLIC_PYTHON_BACKEND_URL.replace(/\/$/, "")}/v1/paper/executions`,
-        {
+      const result = await quorumarkApi<any>("/v1/paper/executions", {
           method: "POST",
-          headers: { "content-type": "application/json" },
           body: JSON.stringify({
             follower_id: state.wallet ?? "demo-follower",
             signal: {
@@ -393,10 +375,7 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
             candles,
             source: "quorumark_fixture",
           }),
-        },
-      );
-      if (!response.ok) throw new Error(`The paper decision returned HTTP ${response.status}`);
-      const result = await response.json();
+        });
       const decision = {
         id: `decision-${signal.id}-${state.wallet ?? "demo-follower"}`,
         signalId: signal.id,

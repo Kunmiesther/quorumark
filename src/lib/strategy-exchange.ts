@@ -205,7 +205,6 @@ export function recomputePerformance(executions: Execution[], capital: number): 
   };
 }
 
-const STORAGE = "quorumark.strategy-exchange.v1";
 export type ExchangeState = {
   strategies: Strategy[];
   decisions: Decision[];
@@ -231,12 +230,6 @@ export function loadExchangeState(): ExchangeState {
         paused: false,
       },
     };
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE) ?? "null") as ExchangeState | null;
-    if (saved) return { ...saved, wallet: wallet ?? saved.wallet, decisions: [], executions: [] };
-  } catch {
-    /* recover with clean demo state */
-  }
   return {
     strategies: seedStrategies,
     decisions: [],
@@ -254,6 +247,5 @@ export function loadExchangeState(): ExchangeState {
   };
 }
 export function saveExchangeState(state: ExchangeState) {
-  if (typeof window !== "undefined")
-    localStorage.setItem(STORAGE, JSON.stringify({ ...state, decisions: [], executions: [] }));
+  void state;
 }

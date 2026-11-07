@@ -11,6 +11,7 @@ import {
 } from "@/lib/wallet/providers";
 import { supabase } from "@/integrations/supabase/client";
 import { saveWalletSession } from "@/lib/quorumark-api";
+import { getNearSelector, showNearWalletSelector, signNearChallenge } from "@/lib/wallet/near";
 
 export const Route = createFileRoute("/connect-wallet")({
   component: ConnectWalletPage,
@@ -30,16 +31,27 @@ function ConnectWalletPage() {
   async function connectNear() {
     setBusy("near");
     try {
-      const near = (
-        window as Window & { near?: { signIn?: () => Promise<{ accountId?: string }> } }
-      ).near;
-      if (!near?.signIn)
-        throw new Error("Native NEAR wallet selector is not configured for this environment yet");
-      const result = await near.signIn();
-      if (!result.accountId) throw new Error("NEAR wallet did not return an account");
-      toast.message(
-        "NEAR wallet connected. A native signing adapter is required to finish authentication.",
-      );
+      await showNearWalletSelector();
+      const selector = await getNearSelector();
+      const account = selector.store.getState().accounts?.[0];
+      if (!account) throw new Error("Choose a NEAR wallet, then try again.");
+      const challenge = await supabase.functions.invoke("wallet-challenge", {
+        body: { provider: "near-wallet-selector", chain: "near", public_address: account.accountId },
+      });
+      if (challenge.error || !challenge.data?.challenge_text || !challenge.data?.nonce)
+        throw new Error("NEAR authentication service is not configured");
+      const signed = await signNearChallenge(challenge.data.challenge_text, challenge.data.nonce);
+      const verified = await supabase.functions.invoke("wallet-verify", {
+        body: {
+          provider: "near-wallet-selector", chain: "near", public_address: account.accountId,
+          signature: signed.signature, public_key: signed.publicKey, nonce_hash: challenge.data.nonce_hash,
+        },
+      });
+      if (verified.error || !verified.data?.ok || !verified.data?.session_token)
+        throw new Error("NEAR signature verification failed");
+      setConnected({ address: account.accountId, chain: "near:testnet" });
+      saveWalletSession({ address: account.accountId, chain: "near:testnet", verified: true, token: verified.data.session_token, expiresAt: verified.data.expires_at });
+      toast.success("NEAR wallet authenticated");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "NEAR wallet connection failed");
     } finally {
@@ -75,7 +87,7 @@ function ConnectWalletPage() {
       });
       if (verified.error || !verified.data?.ok) throw new Error("Signature verification failed");
       setConnected({ address: result.publicAddress, chain: result.chain });
-      saveWalletSession({ address: result.publicAddress, chain: result.chain, verified: true });
+      saveWalletSession({ address: result.publicAddress, chain: result.chain, verified: true, token: verified.data.session_token, expiresAt: verified.data.expires_at });
       toast.success("Wallet authenticated");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Wallet authentication failed");
