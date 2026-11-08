@@ -10,8 +10,8 @@ import {
   type WalletProviderId,
 } from "@/lib/wallet/providers";
 import { supabase } from "@/integrations/supabase/client";
-import { saveWalletSession } from "@/lib/quorumark-api";
-import { getNearSelector, showNearWalletSelector, signNearChallenge } from "@/lib/wallet/near";
+import { clearWalletSession, saveWalletSession } from "@/lib/quorumark-api";
+import { getNearSelector, getSelectedNearWalletId, showNearWalletSelector, signNearChallenge, signOutNear } from "@/lib/wallet/near";
 
 export const Route = createFileRoute("/connect-wallet")({
   component: ConnectWalletPage,
@@ -49,7 +49,8 @@ function ConnectWalletPage() {
       });
       if (verified.error || !verified.data?.ok || !verified.data?.session_token)
         throw new Error("NEAR signature verification failed");
-      setConnected({ address: account.accountId, chain: "near:testnet" });
+      const walletId = await getSelectedNearWalletId();
+      setConnected({ address: account.accountId, chain: walletId ? `${walletId} · near:testnet` : "near:testnet" });
       saveWalletSession({ address: account.accountId, chain: "near:testnet", verified: true, token: verified.data.session_token, expiresAt: verified.data.expires_at });
       toast.success("NEAR wallet authenticated");
     } catch (error) {
@@ -95,6 +96,33 @@ function ConnectWalletPage() {
       setBusy(null);
     }
   }
+  async function disconnectNear() {
+    setBusy("near-disconnect");
+    try {
+      await signOutNear();
+      clearWalletSession();
+      setConnected(null);
+      toast.success("NEAR wallet signed out");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not sign out of the NEAR wallet");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function switchNear() {
+    setBusy("near-switch");
+    try {
+      await signOutNear();
+      clearWalletSession();
+      setConnected(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not switch the NEAR wallet");
+      setBusy(null);
+      return;
+    }
+    setBusy(null);
+    await connectNear();
+  }
   return (
     <main className="q-connect-page">
       <header className="q-connect-header">
@@ -125,6 +153,16 @@ function ConnectWalletPage() {
               <strong>{connected.address}</strong>
               <span>{connected.chain} wallet authenticated</span>
             </div>
+            {connected.chain.includes("near") && (
+              <div className="q-connected-actions">
+                <button className="q-secondary" onClick={switchNear} disabled={!!busy}>
+                  Switch wallet
+                </button>
+                <button className="q-secondary" onClick={disconnectNear} disabled={!!busy}>
+                  Sign out
+                </button>
+              </div>
+            )}
             <Link className="q-primary" to="/marketplace">
               Continue to exchange
             </Link>
@@ -148,7 +186,7 @@ function ConnectWalletPage() {
                 )}{" "}
                 {busy === "near" ? "Opening wallet" : "Connect NEAR Wallet"}
               </button>
-              <small>Compatible native NEAR wallet selector required</small>
+              <small>Choose Meteor Wallet, My NEAR Wallet, or another wallet shown by the native selector.</small>
             </div>
             <div className="q-wallet-secondary">
               <div className="q-wallet-option-head">

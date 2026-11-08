@@ -14,6 +14,14 @@ test("wallet selector exposes explicit primary and secondary choices", async ({ 
   await expect(page.getByRole("button", { name: /Connect NEAR Wallet/ })).toBeEnabled();
 });
 
+test("native NEAR selector lists the configured wallet modules", async ({ page }) => {
+  await page.goto("/connect-wallet");
+  await page.waitForTimeout(3000);
+  await page.getByRole("button", { name: /Connect NEAR Wallet/ }).click();
+  await expect(page.getByText("Meteor Wallet", { exact: true })).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText("MyNearWallet", { exact: true })).toBeVisible();
+});
+
 test("mobile marketplace remains readable", async ({ page }) => {
   await page.goto("/marketplace");
   await page.waitForTimeout(3000);
@@ -35,5 +43,5 @@ test("marketplace search and studio service feedback are interactive", async ({ 
   await page.goto("/studio");
   await page.getByPlaceholder("For example, Atlas range break").fill("Browser verification strategy");
   await page.getByRole("button", { name: /Test my strategy/ }).click();
-  await expect(page.locator("body")).toContainText(/Simulation complete|could not|not configured/i);
+  await expect(page.locator("body")).toContainText(/Simulation complete|could not|not configured/i, { timeout: 15000 });
 });

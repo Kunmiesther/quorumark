@@ -1,6 +1,7 @@
 import { setupWalletSelector, type WalletSelector } from "@near-wallet-selector/core";
 import { setupModal } from "@near-wallet-selector/modal-ui";
 import { setupMyNearWallet } from "@near-wallet-selector/my-near-wallet";
+import { setupMeteorWallet } from "@near-wallet-selector/meteor-wallet";
 import { PUBLIC_SUPABASE_URL } from "@/lib/public-env";
 
 import "@near-wallet-selector/modal-ui/styles.css";
@@ -17,7 +18,10 @@ export async function getNearSelector(): Promise<WalletSelector> {
     selectorPromise = setupWalletSelector({
       network: "testnet",
       optimizeWalletOrder: true,
-      modules: [setupMyNearWallet({ walletUrl: "https://testnet.mynearwallet.com" })],
+      modules: [
+        setupMeteorWallet(),
+        setupMyNearWallet({ walletUrl: "https://testnet.mynearwallet.com" }),
+      ],
     });
   }
   return selectorPromise;
@@ -47,6 +51,11 @@ export async function showNearWalletSelector(): Promise<string> {
     });
     modal?.show();
   });
+}
+
+export async function getSelectedNearWalletId(): Promise<string | null> {
+  const selector = await getNearSelector();
+  return selector.store.getState().selectedWalletId;
 }
 
 export async function signNearChallenge(message: string, nonceHex: string) {
