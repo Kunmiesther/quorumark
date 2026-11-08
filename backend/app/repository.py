@@ -63,6 +63,12 @@ class PaperRepository:
               create table if not exists risk_policies (
                 follower_id text primary key, payload text not null, updated_at text not null
               );
+              create table if not exists publication_evidence (
+                id text primary key, strategy_id text not null, version_id text not null unique,
+                creator_near_account text not null, commitment text not null, schema_version text not null,
+                network text not null, status text not null, transaction_hash text, transaction_receiver text,
+                block_height integer, receipt text, requested_at text not null, confirmed_at text
+              );
             """)
 
     def save_backtest(self, run_id: str, strategy_version: str, source: str, payload: dict[str, Any], created_at: str) -> None:
@@ -139,12 +145,14 @@ class PaperRepository:
             db.execute(f"update strategies set {assignments} where id = ? and creator_id = ?", [*changes.values(), current["id"], creator_id])
         return self.get_strategy(current["id"])
 
-    def save_strategy_version(self, strategy_id: str, version: str, definition: dict[str, Any], backtest_id: str | None, metrics: dict[str, Any] | None, digest: str | None, created_at: str) -> None:
+    def save_strategy_version(self, strategy_id: str, version: str, definition: dict[str, Any], backtest_id: str | None, metrics: dict[str, Any] | None, digest: str | None, created_at: str) -> dict[str, Any]:
+        version_id = "ver_" + uuid.uuid4().hex[:20]
         with self._connect() as db:
             db.execute(
                 "insert or replace into strategy_versions values (?, ?, ?, ?, ?, ?, ?, ?)",
-                ("ver_" + uuid.uuid4().hex[:20], strategy_id, version, json.dumps(definition, sort_keys=True), backtest_id, json.dumps(metrics, sort_keys=True) if metrics else None, digest, created_at),
+                (version_id, strategy_id, version, json.dumps(definition, sort_keys=True), backtest_id, json.dumps(metrics, sort_keys=True) if metrics else None, digest, created_at),
             )
+        return {"id": version_id, "strategy_id": strategy_id, "version": version, "content_hash": digest, "backtest_id": backtest_id}
 
     def list_versions(self, strategy_id: str) -> list[dict[str, Any]]:
         with self._connect() as db:
@@ -156,6 +164,36 @@ class PaperRepository:
             value["backtest_metrics"] = json.loads(value["backtest_metrics"]) if value["backtest_metrics"] else None
             values.append(value)
         return values
+
+    def save_publication_evidence(self, record: dict[str, Any]) -> dict[str, Any]:
+        with self._connect() as db:
+            db.execute(
+                """insert or replace into publication_evidence
+                (id, strategy_id, version_id, creator_near_account, commitment, schema_version, network,
+                 status, transaction_hash, transaction_receiver, block_height, receipt, requested_at, confirmed_at)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (record["id"], record["strategy_id"], record["version_id"], record["creator_near_account"],
+                 record["commitment"], record["schema_version"], record["network"], record["status"],
+                 record.get("transaction_hash"), record.get("transaction_receiver"), record.get("block_height"),
+                 json.dumps(record.get("receipt")) if record.get("receipt") is not None else None,
+                 record["requested_at"], record.get("confirmed_at")),
+            )
+        return record
+
+    def get_publication_evidence(self, version_id: str) -> dict[str, Any] | None:
+        with self._connect() as db:
+            row = db.execute("select * from publication_evidence where version_id = ?", (version_id,)).fetchone()
+        if not row:
+            return None
+        record = dict(row)
+        record["receipt"] = json.loads(record["receipt"]) if record["receipt"] else None
+        return record
+
+    def update_publication_evidence(self, version_id: str, **changes: Any) -> dict[str, Any] | None:
+        assignments = ", ".join(f"{key} = ?" for key in changes)
+        with self._connect() as db:
+            db.execute(f"update publication_evidence set {assignments} where version_id = ?", [*changes.values(), version_id])
+        return self.get_publication_evidence(version_id)
 
     def save_subscription(self, strategy_id: str, follower_id: str, environment: str) -> dict[str, Any]:
         record = {"id": "sub_" + uuid.uuid4().hex[:20], "strategy_id": strategy_id, "follower_id": follower_id, "status": "active", "environment": environment, "created_at": utc_now(), "cancelled_at": None}

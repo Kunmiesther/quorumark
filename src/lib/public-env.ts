@@ -3,7 +3,8 @@ type PublicEnvName =
   | "VITE_SUPABASE_URL"
   | "VITE_SUPABASE_PUBLISHABLE_KEY"
   | "VITE_WALLETCONNECT_PROJECT_ID"
-  | "VITE_PYTHON_BACKEND_URL";
+  | "VITE_PYTHON_BACKEND_URL"
+  | "VITE_NEAR_EVIDENCE_CONTRACT_ID";
 
 export type { PublicEnvName };
 
@@ -44,6 +45,8 @@ function readPublicEnv(name: PublicEnvName): string | undefined {
         return import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || env.VITE_WALLETCONNECT_PROJECT_ID;
       case "VITE_PYTHON_BACKEND_URL":
         return import.meta.env.VITE_PYTHON_BACKEND_URL || env.VITE_PYTHON_BACKEND_URL;
+      case "VITE_NEAR_EVIDENCE_CONTRACT_ID":
+        return import.meta.env.VITE_NEAR_EVIDENCE_CONTRACT_ID || env.VITE_NEAR_EVIDENCE_CONTRACT_ID;
     }
   })();
   return value && value.trim().length > 0 ? value : undefined;
@@ -54,6 +57,8 @@ export const PUBLIC_SUPABASE_URL = readPublicEnv("VITE_SUPABASE_URL");
 export const PUBLIC_SUPABASE_PUBLISHABLE_KEY = readPublicEnv("VITE_SUPABASE_PUBLISHABLE_KEY");
 export const PUBLIC_WALLETCONNECT_PROJECT_ID = readPublicEnv("VITE_WALLETCONNECT_PROJECT_ID");
 export const PUBLIC_PYTHON_BACKEND_URL = readPublicEnv("VITE_PYTHON_BACKEND_URL");
+export const PUBLIC_NEAR_EVIDENCE_CONTRACT_ID = readPublicEnv("VITE_NEAR_EVIDENCE_CONTRACT_ID");
+export const PUBLIC_NEAR_NETWORK = (import.meta.env.VITE_NEAR_NETWORK || procEnv().VITE_NEAR_NETWORK || "testnet").trim();
 
 export function getMissingPublicBackendEnv(): PublicEnvName[] {
   return REQUIRED_PUBLIC_BACKEND_ENV.filter((name) => !readPublicEnv(name));

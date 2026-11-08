@@ -83,11 +83,25 @@ class SupabaseRepository:
         rows = self._request("PATCH", "strategy_exchange_strategies", params={"id": f"eq.{current['id']}", "creator_id": f"eq.{creator_id}"}, body=changes, prefer="return=representation")
         return rows[0] if rows else self.get_strategy(current["id"])
 
-    def save_strategy_version(self, strategy_id: str, version: str, definition: dict[str, Any], backtest_id: str | None, metrics: dict[str, Any] | None, digest: str | None, created_at: str) -> None:
-        self._request("POST", "strategy_exchange_versions", body={"strategy_id": strategy_id, "version": version, "definition": definition, "backtest_id": backtest_id, "backtest_metrics": metrics, "content_hash": digest, "created_at": created_at}, prefer="resolution=merge-duplicates")
+    def save_strategy_version(self, strategy_id: str, version: str, definition: dict[str, Any], backtest_id: str | None, metrics: dict[str, Any] | None, digest: str | None, created_at: str) -> dict[str, Any]:
+        body = {"strategy_id": strategy_id, "version": version, "definition": definition, "backtest_id": backtest_id, "backtest_metrics": metrics, "content_hash": digest, "created_at": created_at}
+        rows = self._request("POST", "strategy_exchange_versions", body=body, prefer="resolution=merge-duplicates,return=representation")
+        return rows[0] if rows else body
 
     def list_versions(self, strategy_id: str) -> list[dict[str, Any]]:
         return self._request("GET", "strategy_exchange_versions", params={"strategy_id": f"eq.{strategy_id}", "select": "*", "order": "created_at.desc"})
+
+    def save_publication_evidence(self, record: dict[str, Any]) -> dict[str, Any]:
+        rows = self._request("POST", "strategy_exchange_publication_evidence", body=record, prefer="resolution=merge-duplicates,return=representation")
+        return rows[0] if rows else record
+
+    def get_publication_evidence(self, version_id: str) -> dict[str, Any] | None:
+        rows = self._request("GET", "strategy_exchange_publication_evidence", params={"version_id": f"eq.{version_id}", "select": "*", "limit": "1"})
+        return rows[0] if rows else None
+
+    def update_publication_evidence(self, version_id: str, **changes: Any) -> dict[str, Any] | None:
+        rows = self._request("PATCH", "strategy_exchange_publication_evidence", params={"version_id": f"eq.{version_id}"}, body=changes, prefer="return=representation")
+        return rows[0] if rows else None
 
     def save_subscription(self, strategy_id: str, follower_id: str, environment: str) -> dict[str, Any]:
         now = datetime.now(timezone.utc)

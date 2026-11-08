@@ -8,6 +8,8 @@ export default defineConfig({
   // Meteor's browser bundle still references the Node global alias. Keep the
   // selector usable in browsers without exposing any server globals.
   define: { global: "globalThis" },
+  resolve: { alias: { buffer: "buffer/" } },
+  optimizeDeps: { include: ["buffer"] },
   plugins: [
     tsconfigPaths(),
     tailwindcss(),

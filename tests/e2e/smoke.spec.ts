@@ -15,11 +15,14 @@ test("wallet selector exposes explicit primary and secondary choices", async ({ 
 });
 
 test("native NEAR selector lists the configured wallet modules", async ({ page }) => {
+  const runtimeErrors: string[] = [];
+  page.on("pageerror", (error) => runtimeErrors.push(error.message));
   await page.goto("/connect-wallet");
   await page.waitForTimeout(3000);
   await page.getByRole("button", { name: /Connect NEAR Wallet/ }).click();
   await expect(page.getByText("Meteor Wallet", { exact: true })).toBeVisible({ timeout: 30000 });
   await expect(page.getByText("MyNearWallet", { exact: true })).toBeVisible();
+  expect(runtimeErrors.filter((message) => /buffer|KeyPairEd25519/i.test(message))).toEqual([]);
 });
 
 test("mobile marketplace remains readable", async ({ page }) => {

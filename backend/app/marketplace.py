@@ -55,6 +55,14 @@ class PolicyRequest(BaseModel):
     paused: bool = False
 
 
+class PublicationPrepareRequest(BaseModel):
+    version: str = Field(min_length=1, max_length=40, pattern=r"^v[0-9]+(?:\.[0-9]+)*$")
+
+
+class PublicationConfirmRequest(BaseModel):
+    transaction_hash: str = Field(min_length=20, max_length=100)
+
+
 def slugify(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     return slug[:70] or "strategy"

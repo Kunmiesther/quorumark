@@ -11,9 +11,10 @@ import {
 } from "@/lib/wallet/providers";
 import { supabase } from "@/integrations/supabase/client";
 import { clearWalletSession, saveWalletSession } from "@/lib/quorumark-api";
-import { getNearSelector, getSelectedNearWalletId, showNearWalletSelector, signNearChallenge, signOutNear } from "@/lib/wallet/near";
+import { ensureBrowserPolyfills } from "@/lib/browser-polyfills";
 
 export const Route = createFileRoute("/connect-wallet")({
+  ssr: false,
   component: ConnectWalletPage,
   head: () => ({
     meta: [
@@ -28,9 +29,14 @@ function ConnectWalletPage() {
   const providers = useMemo(() => listProviders(), []);
   const [busy, setBusy] = useState<string | null>(null);
   const [connected, setConnected] = useState<{ address: string; chain: string } | null>(null);
+  async function nearWallet() {
+    await ensureBrowserPolyfills();
+    return import("@/lib/wallet/near");
+  }
   async function connectNear() {
     setBusy("near");
     try {
+      const { getNearSelector, getSelectedNearWalletId, showNearWalletSelector, signNearChallenge } = await nearWallet();
       await showNearWalletSelector();
       const selector = await getNearSelector();
       const account = selector.store.getState().accounts?.[0];
@@ -99,6 +105,7 @@ function ConnectWalletPage() {
   async function disconnectNear() {
     setBusy("near-disconnect");
     try {
+      const { signOutNear } = await nearWallet();
       await signOutNear();
       clearWalletSession();
       setConnected(null);
@@ -112,6 +119,7 @@ function ConnectWalletPage() {
   async function switchNear() {
     setBusy("near-switch");
     try {
+      const { signOutNear } = await nearWallet();
       await signOutNear();
       clearWalletSession();
       setConnected(null);

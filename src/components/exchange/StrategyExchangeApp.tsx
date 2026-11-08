@@ -645,6 +645,10 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedStrategyId, setSavedStrategyId] = useState<string | null>(null);
+  const [savedVersionId, setSavedVersionId] = useState<string | null>(null);
+  const [published, setPublished] = useState(false);
+  const [anchoring, setAnchoring] = useState(false);
+  const [publicationEvidence, setPublicationEvidence] = useState<{ status: string; transaction_hash?: string } | null>(null);
   const [publishing, setPublishing] = useState(false);
   async function runBacktest() {
     if (!PUBLIC_PYTHON_BACKEND_URL) {
@@ -727,7 +731,7 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
             }),
           });
       setSavedStrategyId(created.id);
-      await quorumarkApi(`/v1/strategies/${created.id}/versions`, {
+      const version = await quorumarkApi<{ id: string }>(`/v1/strategies/${created.id}/versions`, {
         method: "POST",
         body: JSON.stringify({
           version: "v1.0",
@@ -736,8 +740,10 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
           backtest_metrics: metrics,
         }),
       });
+      setSavedVersionId(version.id);
       if (publish) {
         await quorumarkApi(`/v1/strategies/${created.id}/publish`, { method: "POST" });
+        setPublished(true);
         toast.success("Strategy published to the local paper marketplace");
       } else {
         toast.success("Strategy draft saved");
@@ -746,6 +752,39 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
       setError(saveError instanceof Error ? saveError.message : "The strategy could not be saved");
     } finally {
       setPublishing(false);
+    }
+  }
+  async function anchorPublishedVersion() {
+    if (!savedStrategyId || !savedVersionId) {
+      setError("Publish this version before anchoring its evidence.");
+      return;
+    }
+    setAnchoring(true);
+    setError(null);
+    try {
+      const prepared = await quorumarkApi<{ version_id: string; commitment: string; creator_near_account: string; network: "near:testnet" }>(
+        `/v1/strategies/${savedStrategyId}/publication-evidence`,
+        { method: "POST", body: JSON.stringify({ version: "v1.0" }) },
+      );
+      const { ensureBrowserPolyfills } = await import("@/lib/browser-polyfills");
+      await ensureBrowserPolyfills();
+      const { anchorPublication } = await import("@/lib/near-publication-evidence");
+      const submitted = await anchorPublication({
+        strategy_id: savedStrategyId,
+        version_id: prepared.version_id,
+        creator_near_account: prepared.creator_near_account,
+        network: prepared.network,
+      }, prepared.commitment);
+      const confirmed = await quorumarkApi<{ status: string; transaction_hash?: string }>(
+        `/v1/strategies/${savedStrategyId}/publication-evidence/${prepared.version_id}/confirm`,
+        { method: "POST", body: JSON.stringify({ transaction_hash: submitted.transaction_hash }) },
+      );
+      setPublicationEvidence(confirmed);
+      toast.success("NEAR testnet publication evidence confirmed");
+    } catch (anchorError) {
+      setError(anchorError instanceof Error ? anchorError.message : "NEAR testnet evidence could not be confirmed");
+    } finally {
+      setAnchoring(false);
     }
   }
   return (
@@ -841,6 +880,20 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
                   Publish version <ArrowRight size={15} />
                 </button>
               </div>
+              {published && !publicationEvidence && (
+                <div className="q-notice">
+                  <ShieldCheck size={16} />
+                  <span>Hosted publication is complete. You can optionally anchor this version on NEAR testnet.</span>
+                  <button className="q-secondary" onClick={anchorPublishedVersion} disabled={anchoring}>
+                    {anchoring ? "Waiting for wallet…" : "Anchor on NEAR testnet"}
+                  </button>
+                </div>
+              )}
+              {publicationEvidence?.transaction_hash && (
+                <div className="q-notice q-notice-success">
+                  <Check size={16} /> NEAR testnet evidence confirmed · {publicationEvidence.transaction_hash}
+                </div>
+              )}
             </>
           ) : (
             <div className="q-result-empty">

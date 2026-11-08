@@ -1,4 +1,7 @@
 import os
+import base64
+import httpx
+import json
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -11,11 +14,14 @@ from .paper import process_paper_signal
 from .repository import PaperRepository
 from .supabase_repository import SupabaseRepository
 from .security import require_verified_identity
+from .publication_evidence import PUBLICATION_SCHEMA_VERSION, publication_commitment
 from .marketplace import (
     PolicyRequest,
     StrategyDraftRequest,
     StrategyVersionRequest,
     SubscriptionRequest,
+    PublicationPrepareRequest,
+    PublicationConfirmRequest,
     create_strategy,
     require_local_identity,
     to_public_strategy,
@@ -77,9 +83,9 @@ def create_version(strategy_id: str, request: StrategyVersionRequest, identity: 
     strategy = repository.get_strategy(strategy_id)
     if not strategy or strategy["creator_id"] != identity:
         raise HTTPException(status_code=404, detail="Strategy not found")
-    repository.save_strategy_version(strategy["id"], request.version, request.definition, request.backtest_id, request.backtest_metrics, request.evidence_hash, datetime.now(timezone.utc).isoformat())
+    version = repository.save_strategy_version(strategy["id"], request.version, request.definition, request.backtest_id, request.backtest_metrics, request.evidence_hash, datetime.now(timezone.utc).isoformat())
     updated = repository.update_strategy(strategy["id"], identity, current_version=request.version)
-    return updated or strategy
+    return {**version, "strategy": updated or strategy}
 
 
 @app.post("/v1/strategies/{strategy_id}/publish")
@@ -91,6 +97,63 @@ def publish_strategy(strategy_id: str, identity: str = Depends(require_local_ide
         raise HTTPException(status_code=409, detail="Create a version before publishing")
     updated = repository.update_strategy(strategy["id"], identity, status="published", published_at=datetime.now(timezone.utc).isoformat())
     return updated or strategy
+
+
+@app.post("/v1/strategies/{strategy_id}/publication-evidence", status_code=201)
+def prepare_publication_evidence(strategy_id: str, request: PublicationPrepareRequest, identity: str = Depends(require_local_identity)) -> dict[str, object]:
+    strategy = repository.get_strategy(strategy_id)
+    if not strategy or strategy.get("creator_id") != identity or strategy.get("status") != "published":
+        raise HTTPException(status_code=404, detail="Published strategy not found")
+    version = next((item for item in repository.list_versions(strategy_id) if item.get("version") == request.version), None)
+    if not version or not version.get("id"):
+        raise HTTPException(status_code=404, detail="Strategy version not found")
+    account = identity.removeprefix("near:")
+    if not account.endswith(".testnet") and account != "testnet":
+        raise HTTPException(status_code=400, detail="A verified NEAR testnet creator session is required")
+    record = {
+        "id": str(version["id"]), "strategy_id": strategy_id, "version_id": str(version["id"]),
+        "creator_near_account": account, "schema_version": PUBLICATION_SCHEMA_VERSION, "network": "near:testnet",
+        "status": "pending", "commitment": publication_commitment({
+            "strategy_id": strategy_id, "version_id": str(version["id"]), "creator_near_account": account,
+            "strategy_commitment": version.get("content_hash") or "", "backtest_commitment": version.get("backtest_id") or "",
+            "published_at": strategy.get("published_at") or "", "network": "near:testnet",
+        }), "requested_at": datetime.now(timezone.utc).isoformat(),
+    }
+    existing = repository.get_publication_evidence(str(version["id"]))
+    if existing and existing.get("commitment") != record["commitment"]:
+        raise HTTPException(status_code=409, detail="Publication evidence commitment is immutable")
+    return repository.save_publication_evidence(existing or record)
+
+
+@app.post("/v1/strategies/{strategy_id}/publication-evidence/{version_id}/confirm")
+def confirm_publication_evidence(strategy_id: str, version_id: str, request: PublicationConfirmRequest, identity: str = Depends(require_local_identity)) -> dict[str, object]:
+    evidence = repository.get_publication_evidence(version_id)
+    contract_id = os.getenv("QUORUMARK_NEAR_EVIDENCE_CONTRACT_ID", "").strip()
+    if not evidence or evidence.get("strategy_id") != strategy_id or evidence.get("creator_near_account") != identity.removeprefix("near:"):
+        raise HTTPException(status_code=404, detail="Publication evidence request not found")
+    if not contract_id or evidence.get("network") != "near:testnet":
+        raise HTTPException(status_code=503, detail="NEAR testnet evidence contract is not configured")
+    rpc = os.getenv("VITE_NEAR_RPC_URL", "https://rpc.testnet.near.org").strip()
+    try:
+        response = httpx.post(rpc, json={"jsonrpc": "2.0", "id": "quorumark-evidence", "method": "tx", "params": [request.transaction_hash, evidence["creator_near_account"]]}, timeout=20)
+        payload = response.json()
+        result = payload.get("result") or {}
+        transaction = result.get("transaction") or {}
+        if payload.get("error") or transaction.get("signer_id") != evidence["creator_near_account"] or transaction.get("receiver_id") != contract_id:
+            raise ValueError("Transaction signer or receiver does not match publication evidence")
+        status = result.get("status") or {}
+        if "SuccessValue" not in status:
+            raise ValueError("Transaction is not finalized successfully")
+        action = next((item.get("FunctionCall") for item in transaction.get("actions", []) if item.get("FunctionCall")), None)
+        args = json.loads(base64.b64decode(action.get("args", "")).decode("utf-8")) if action else {}
+        if args.get("commitment") != evidence.get("commitment") or args.get("strategy_id") != strategy_id or args.get("version_id") != version_id:
+            raise ValueError("Transaction commitment does not match the publication record")
+    except (httpx.HTTPError, ValueError, KeyError, json.JSONDecodeError, base64.binascii.Error) as error:
+        repository.update_publication_evidence(version_id, status="failed", transaction_hash=request.transaction_hash)
+        raise HTTPException(status_code=422, detail=f"NEAR transaction could not be verified: {error}") from error
+    confirmed = repository.update_publication_evidence(version_id, status="confirmed", transaction_hash=request.transaction_hash, transaction_receiver=contract_id, receipt=result, confirmed_at=datetime.now(timezone.utc).isoformat())
+    repository.update_strategy(strategy_id, identity, evidence_class="testnet_executed")
+    return confirmed or evidence
 
 
 @app.get("/v1/strategies/{strategy_id}/versions")
