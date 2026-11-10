@@ -52,6 +52,12 @@ __pycache__/
 # Local replay evidence is reproducible and can exceed 500 MB.
 backtest_artifacts/
 
+# Generated test/build output is not release source.
+target/
+test-results/
+backend/backend/
+backend/.pytest-release-tmp/
+
 # Supabase CLI local link and runtime metadata
 supabase/.temp/
 .vercel
