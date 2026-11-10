@@ -25,6 +25,40 @@ Wallet challenge and signature verification are isolated in the two retained Sup
 
 NEAR Intents is isolated in `src/lib/near-intents-adapter.ts`. It refuses quote or settlement claims until a supported relay, route, and credentials are configured; it never fabricates a transaction hash.
 
+## Hackathon walkthrough
+
+Quorumark serves strategy creators who need inspectable, versioned evidence and
+followers who want independent risk controls before acting on a signal. The
+creator flow is: authenticate with a NEAR wallet, create and configure a
+strategy, run the Python simulation engine, save a draft, create an immutable
+version, publish it, and optionally anchor its domain-separated commitment on
+NEAR testnet. The follower flow is: discover a published method, inspect its
+risk and evidence class, subscribe, configure limits, simulate a signal,
+inspect the paper execution, verify recomputed performance, and pause or
+cancel the subscription.
+
+AI-assisted evaluation is presented as an analysis aid around strategy
+research and inspection; Quorumark does not claim autonomous trading or
+fabricated performance. The Python engine produces the genuine backtest and
+paper-execution results. Supabase stores authenticated identities, ownership,
+versions, subscriptions, and evidence with server-side authorization. NEAR
+Wallet Selector handles testnet authentication, and the narrow Rust contract
+stores only an immutable publication commitment—not strategy parameters or
+private logic.
+
+For a credential-safe demo, use the public landing page, inspect the sample in
+Marketplace, run the Studio simulation, open Follower to apply risk controls,
+open Verification to recompute the ledger, then show Connect Wallet and the
+testnet-only evidence explanation. A real wallet signature and any contract
+deployment must be approved by the wallet owner; browser automation covers
+the UI and rejection paths but does not approve wallet prompts.
+
+The release intentionally excludes live trading, real-money settlement,
+custody, recovery phrases, cross-chain settlement claims, and unsupported AI
+autonomy. NEAR publication evidence is unavailable until a dedicated testnet
+contract account is deployed and both public and server-only contract IDs are
+configured.
+
 ## Local development
 
 ```sh
