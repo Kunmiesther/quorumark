@@ -44,9 +44,13 @@ function ConnectWalletPage() {
       const challenge = await supabase.functions.invoke("wallet-challenge", {
         body: { provider: "near-wallet-selector", chain: "near", public_address: account.accountId },
       });
-      if (challenge.error || !challenge.data?.challenge_text || !challenge.data?.nonce)
-        throw new Error("NEAR authentication service is not configured");
-      const signed = await signNearChallenge(challenge.data.challenge_text, challenge.data.nonce);
+      if (challenge.error || !challenge.data?.challenge_text || !challenge.data?.nonce || !challenge.data?.recipient)
+        throw new Error(challenge.error?.message ?? challenge.data?.message ?? "NEAR authentication service is unavailable.");
+      const signed = await signNearChallenge(
+        challenge.data.challenge_text,
+        challenge.data.nonce,
+        challenge.data.recipient,
+      );
       const verified = await supabase.functions.invoke("wallet-verify", {
         body: {
           provider: "near-wallet-selector", chain: "near", public_address: account.accountId,
@@ -54,7 +58,7 @@ function ConnectWalletPage() {
         },
       });
       if (verified.error || !verified.data?.ok || !verified.data?.session_token)
-        throw new Error("NEAR signature verification failed");
+        throw new Error(verified.error?.message ?? verified.data?.message ?? "NEAR signature verification failed.");
       const walletId = await getSelectedNearWalletId();
       setConnected({ address: account.accountId, chain: walletId ? `${walletId} · near:testnet` : "near:testnet" });
       saveWalletSession({ address: account.accountId, chain: "near:testnet", verified: true, token: verified.data.session_token, expiresAt: verified.data.expires_at });

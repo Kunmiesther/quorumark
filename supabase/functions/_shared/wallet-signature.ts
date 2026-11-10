@@ -37,6 +37,23 @@ export function hexToBytes(hex: string): Uint8Array {
   return out;
 }
 
+function base64ToBytes(value: string): Uint8Array {
+  const normalized = value.trim().replace(/-/g, "+").replace(/_/g, "/");
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(normalized) || normalized.length % 4 === 1) {
+    throw new Error("BAD_BASE64");
+  }
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+}
+
+/** Decode the exact nonce representation embedded in the server challenge. */
+export function decodeNearNonce(value: string): Uint8Array {
+  const input = value.trim();
+  const bytes = /^[0-9a-fA-F]{64}$/.test(input) ? hexToBytes(input) : base64ToBytes(input);
+  if (bytes.length !== 32) throw new Error("INVALID_NONCE");
+  return bytes;
+}
+
 export function decodeSignature(sig: string): Uint8Array {
   const s = sig.trim();
   if (s.startsWith("0x")) return hexToBytes(s);
@@ -69,7 +86,12 @@ export async function verifyWalletSignature(params: {
     if (chain === "near") {
       if (!publicKey?.startsWith("ed25519:") || !recipient) return { ok: false, code: "INVALID_PUBLIC_KEY", message: "NEAR public key is required." };
       const nonceLine = challengeText.split("\n").find((line) => line.startsWith("Nonce: "))?.slice(7).trim();
-      const nonce = nonceLine ? hexToBytes(nonceLine) : new Uint8Array();
+      let nonce: Uint8Array;
+      try {
+        nonce = nonceLine ? decodeNearNonce(nonceLine) : new Uint8Array();
+      } catch {
+        return { ok: false, code: "INVALID_NONCE", message: "NEAR challenge nonce is invalid." };
+      }
       if (nonce.length !== 32) return { ok: false, code: "INVALID_NONCE", message: "NEAR challenge nonce is invalid." };
       const payload = serializeNep413(challengeText, nonce, recipient);
       const pub = bs58.decode(publicKey.slice("ed25519:".length));

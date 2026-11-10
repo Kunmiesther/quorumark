@@ -4,7 +4,6 @@
 export async function ensureBrowserPolyfills(): Promise<void> {
   if (typeof window === "undefined") return;
   const runtime = globalThis as typeof globalThis & { Buffer?: unknown };
-  if (runtime.Buffer) return;
   const { Buffer } = await import("buffer");
   runtime.Buffer = Buffer;
 }

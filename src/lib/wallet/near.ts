@@ -2,16 +2,12 @@ import { setupWalletSelector, type WalletSelector } from "@near-wallet-selector/
 import { setupModal } from "@near-wallet-selector/modal-ui";
 import { setupMyNearWallet } from "@near-wallet-selector/my-near-wallet";
 import { setupMeteorWallet } from "@near-wallet-selector/meteor-wallet";
-import { PUBLIC_SUPABASE_URL } from "@/lib/public-env";
+import { toNearWalletNonce } from "@/lib/wallet/near-nonce";
 
 import "@near-wallet-selector/modal-ui/styles.css";
 
 let selectorPromise: Promise<WalletSelector> | undefined;
 let modal: ReturnType<typeof setupModal> | undefined;
-
-function recipient(): string {
-  return new URL(PUBLIC_SUPABASE_URL ?? window.location.origin).hostname;
-}
 
 export async function getNearSelector(): Promise<WalletSelector> {
   if (!selectorPromise) {
@@ -58,17 +54,19 @@ export async function getSelectedNearWalletId(): Promise<string | null> {
   return selector.store.getState().selectedWalletId;
 }
 
-export async function signNearChallenge(message: string, nonceHex: string) {
+export async function signNearChallenge(message: string, nonceValue: string, challengeRecipient: string) {
   const selector = await getNearSelector();
   const state = selector.store.getState();
   const account = state.accounts?.[0];
   if (!account) throw new Error("Choose a NEAR wallet before signing in.");
   const wallet = await selector.wallet();
   if (!wallet.signMessage) throw new Error("The selected NEAR wallet does not support message signing.");
+  const recipient = challengeRecipient.trim();
+  if (!recipient) throw new Error("NEAR authentication challenge has no recipient.");
   const signed = await wallet.signMessage({
     message,
-    recipient: recipient(),
-    nonce: Uint8Array.from(nonceHex.match(/.{2}/g)?.map((value) => Number.parseInt(value, 16)) ?? []) as unknown as Buffer,
+    recipient,
+    nonce: toNearWalletNonce(nonceValue),
   });
   if (!signed) throw new Error("The NEAR wallet did not return a signature.");
   return { accountId: signed.accountId, publicKey: signed.publicKey, signature: signed.signature };

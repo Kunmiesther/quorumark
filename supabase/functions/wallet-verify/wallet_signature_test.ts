@@ -4,7 +4,7 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { ed25519 } from "https://esm.sh/@noble/curves@1.6.0/ed25519";
 import bs58 from "https://esm.sh/bs58@6.0.0";
 import { privateKeyToAccount, generatePrivateKey } from "https://esm.sh/viem@2.21.19/accounts";
-import { verifyWalletSignature } from "../_shared/wallet-signature.ts";
+import { decodeNearNonce, verifyWalletSignature } from "../_shared/wallet-signature.ts";
 
 const challengeText = [
   "Quorumark",
@@ -128,6 +128,28 @@ Deno.test("near: tampered NEP-413 signature rejected", async () => {
   signature[0] ^= 1;
   const res = await verifyWalletSignature({ chain: "near", publicAddress: "alice.testnet", publicKey: `ed25519:${bs58.encode(pub)}`, signature: bs58.encode(signature), challengeText: message, recipient: "app.example" });
   assertEquals(res.ok, false);
+});
+
+Deno.test("near: base64 nonce decodes to the same 32 bytes", () => {
+  const bytes = new Uint8Array(32);
+  bytes.fill(9);
+  const encoded = btoa(String.fromCharCode(...bytes));
+  assertEquals(decodeNearNonce(encoded), bytes);
+});
+
+Deno.test("near: incorrect nonce lengths are rejected", () => {
+  let threw = false;
+  try { decodeNearNonce("00"); } catch { threw = true; }
+  assertEquals(threw, true);
+});
+
+Deno.test("near: invalid nonce prevents signature verification", async () => {
+  const priv = ed25519.utils.randomPrivateKey();
+  const pub = ed25519.getPublicKey(priv);
+  const message = "Quorumark\nNonce: AA==";
+  const signature = bs58.encode(ed25519.sign(new TextEncoder().encode(message), priv));
+  const res = await verifyWalletSignature({ chain: "near", publicAddress: "alice.testnet", publicKey: `ed25519:${bs58.encode(pub)}`, signature, challengeText: message, recipient: "app.example" });
+  assertEquals(res, { ok: false, code: "INVALID_NONCE", message: "NEAR challenge nonce is invalid." });
 });
 
 // ---------- Nonce lifecycle (pure logic, mirrors index.ts checks) ----------
