@@ -9,10 +9,10 @@ import {
   Network,
   ShieldCheck,
   Sparkles,
-  WalletCards,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { QuorumarkLogo } from "@/components/brand/QuorumarkLogo";
+import { WalletAccountMenu } from "@/components/wallet/WalletAccountMenu";
 
 const agents = [
   { label: "Creator", x: 13, y: 26, tone: "cyan" },
@@ -116,9 +116,7 @@ export function StrategyExchangeLanding() {
           <a href="#evidence">Verification</a>
           <Link to="/marketplace">Marketplace</Link>
         </nav>
-        <Link to="/connect-wallet" className="q-landing-wallet">
-          <WalletCards size={16} /> Connect wallet
-        </Link>
+        <WalletAccountMenu className="q-landing-wallet" />
       </header>
       <section className="q-landing-hero">
         <motion.div
@@ -202,7 +200,7 @@ export function StrategyExchangeLanding() {
             number="01"
             icon={<Sparkles size={19} />}
             title="Build and test"
-            text="Describe a method, choose its markets, and run a deterministic fixture-candle simulation in the Strategy Studio."
+            text="Describe a method, choose its markets, and test it with clearly labelled sample market data in Strategy Studio."
           />
           <Step
             number="02"
@@ -319,11 +317,6 @@ export function StrategyExchangeLanding() {
       <footer className="q-landing-footer">
         <QuorumarkLogo />
         <span>Quorumark Strategy Exchange · paper and testnet environments only</span>
-        <div>
-          <Link to="/privacy">Privacy</Link>
-          <Link to="/terms">Terms</Link>
-          <Link to="/risk-disclosure">Risk disclosure</Link>
-        </div>
       </footer>
     </main>
   );

@@ -95,8 +95,16 @@ export async function verifyWalletSignature(params: {
       if (nonce.length !== 32) return { ok: false, code: "INVALID_NONCE", message: "NEAR challenge nonce is invalid." };
       const payload = serializeNep413(challengeText, nonce, recipient);
       const pub = bs58.decode(publicKey.slice("ed25519:".length));
-      const sig = bs58.decode(signature);
-      if (pub.length !== 32 || sig.length !== 64 || !ed25519.verify(sig, payload, pub)) return { ok: false, code: "INVALID_SIGNATURE", message: "Signature did not match NEAR wallet." };
+      let sig: Uint8Array;
+      try {
+        // Wallet Selector's NEP-413 adapters return the signature as base64.
+        // Keep base58 as a compatibility fallback for older adapters.
+        sig = base64ToBytes(signature);
+      } catch {
+        sig = bs58.decode(signature);
+      }
+      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", payload));
+      if (pub.length !== 32 || sig.length !== 64 || !ed25519.verify(sig, digest, pub)) return { ok: false, code: "INVALID_SIGNATURE", message: "Signature did not match NEAR wallet." };
       if (publicAddress.length < 2) return { ok: false, code: "INVALID_ADDRESS", message: "Invalid NEAR account." };
       return { ok: true };
     }

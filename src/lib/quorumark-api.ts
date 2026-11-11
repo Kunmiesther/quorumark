@@ -16,12 +16,17 @@ export function getWalletSession(): WalletSession | null {
 }
 
 export function saveWalletSession(session: WalletSession) {
-  if (typeof window !== "undefined")
+  if (typeof window !== "undefined") {
     window.sessionStorage.setItem(WALLET_SESSION_KEY, JSON.stringify(session));
+    window.dispatchEvent(new Event("quorumark-wallet-session"));
+  }
 }
 
 export function clearWalletSession() {
-  if (typeof window !== "undefined") window.sessionStorage.removeItem(WALLET_SESSION_KEY);
+  if (typeof window !== "undefined") {
+    window.sessionStorage.removeItem(WALLET_SESSION_KEY);
+    window.dispatchEvent(new Event("quorumark-wallet-session"));
+  }
 }
 
 export async function quorumarkApi<T>(path: string, init: RequestInit = {}): Promise<T> {

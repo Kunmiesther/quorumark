@@ -114,7 +114,8 @@ Deno.test("near: valid NEP-413 signature accepted", async () => {
   nonce.fill(7);
   const message = `Quorumark\nNonce: ${Array.from(nonce).map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
   const payload = nearPayload(message, nonce, "app.example");
-  const signature = bs58.encode(ed25519.sign(payload, priv));
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", payload));
+  const signature = btoa(String.fromCharCode(...ed25519.sign(digest, priv)));
   const res = await verifyWalletSignature({ chain: "near", publicAddress: "alice.testnet", publicKey: `ed25519:${bs58.encode(pub)}`, signature, challengeText: message, recipient: "app.example" });
   assertEquals(res.ok, true);
 });
@@ -124,9 +125,10 @@ Deno.test("near: tampered NEP-413 signature rejected", async () => {
   const pub = ed25519.getPublicKey(priv);
   const nonce = new Uint8Array(32);
   const message = `Quorumark\nNonce: ${Array.from(nonce).map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
-  const signature = ed25519.sign(nearPayload(message, nonce, "app.example"), priv);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", nearPayload(message, nonce, "app.example")));
+  const signature = ed25519.sign(digest, priv);
   signature[0] ^= 1;
-  const res = await verifyWalletSignature({ chain: "near", publicAddress: "alice.testnet", publicKey: `ed25519:${bs58.encode(pub)}`, signature: bs58.encode(signature), challengeText: message, recipient: "app.example" });
+  const res = await verifyWalletSignature({ chain: "near", publicAddress: "alice.testnet", publicKey: `ed25519:${bs58.encode(pub)}`, signature: btoa(String.fromCharCode(...signature)), challengeText: message, recipient: "app.example" });
   assertEquals(res.ok, false);
 });
 

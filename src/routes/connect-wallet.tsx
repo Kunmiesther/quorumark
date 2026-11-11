@@ -33,6 +33,24 @@ function ConnectWalletPage() {
     await ensureBrowserPolyfills();
     return import("@/lib/wallet/near");
   }
+  async function readableFunctionError(error: unknown, fallback: string) {
+    if (error && typeof error === "object" && "context" in error) {
+      const context = (error as { context?: Response }).context;
+      try {
+        const body = await context?.clone().json() as { message?: string; code?: string } | undefined;
+        if (body?.code === "CHALLENGE_EXPIRED") return "This sign-in request expired. Connect again.";
+        if (body?.code === "CHALLENGE_ALREADY_USED") return "This sign-in request was already used. Connect again.";
+        if (body?.code === "INVALID_SIGNATURE") return "We couldn't verify your wallet. Please try again.";
+        if (body?.message) return body.message;
+      } catch {
+        // Keep the user-facing message safe when the function response is unavailable.
+      }
+    }
+    const message = error instanceof Error ? error.message : "";
+    if (/cancel|reject|denied|closed/i.test(message)) return "The signature was cancelled. No changes were made.";
+    if (/network|fetch|timeout|non-2xx|function/i.test(message)) return "We're having trouble connecting right now.";
+    return message && !/edge function returned/i.test(message) ? message : fallback;
+  }
   async function connectNear() {
     setBusy("near");
     try {
@@ -45,12 +63,14 @@ function ConnectWalletPage() {
         body: { provider: "near-wallet-selector", chain: "near", public_address: account.accountId },
       });
       if (challenge.error || !challenge.data?.challenge_text || !challenge.data?.nonce || !challenge.data?.recipient)
-        throw new Error(challenge.error?.message ?? challenge.data?.message ?? "NEAR authentication service is unavailable.");
+        throw new Error(await readableFunctionError(challenge.error, "We're having trouble connecting right now."));
       const signed = await signNearChallenge(
         challenge.data.challenge_text,
         challenge.data.nonce,
         challenge.data.recipient,
       );
+      if (signed.accountId.toLowerCase() !== account.accountId.toLowerCase())
+        throw new Error("The wallet account changed during sign-in. Connect again.");
       const verified = await supabase.functions.invoke("wallet-verify", {
         body: {
           provider: "near-wallet-selector", chain: "near", public_address: account.accountId,
@@ -58,13 +78,13 @@ function ConnectWalletPage() {
         },
       });
       if (verified.error || !verified.data?.ok || !verified.data?.session_token)
-        throw new Error(verified.error?.message ?? verified.data?.message ?? "NEAR signature verification failed.");
+        throw new Error(await readableFunctionError(verified.error, "We couldn't verify your wallet. Please try again."));
       const walletId = await getSelectedNearWalletId();
       setConnected({ address: account.accountId, chain: walletId ? `${walletId} · near:testnet` : "near:testnet" });
       saveWalletSession({ address: account.accountId, chain: "near:testnet", verified: true, token: verified.data.session_token, expiresAt: verified.data.expires_at });
       toast.success("NEAR wallet authenticated");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "NEAR wallet connection failed");
+      toast.error(error instanceof Error ? error.message : "We couldn't verify your wallet. Please try again.");
     } finally {
       setBusy(null);
     }
@@ -81,7 +101,7 @@ function ConnectWalletPage() {
         },
       });
       if (challenge.error || !challenge.data?.challenge_text)
-        throw new Error("Wallet challenge service is not configured");
+        throw new Error(await readableFunctionError(challenge.error, "We're having trouble connecting right now."));
       const signed = await signChallenge(
         result.provider,
         result.publicAddress,
@@ -96,7 +116,7 @@ function ConnectWalletPage() {
           nonce_hash: challenge.data.nonce_hash,
         },
       });
-      if (verified.error || !verified.data?.ok) throw new Error("Signature verification failed");
+      if (verified.error || !verified.data?.ok) throw new Error(await readableFunctionError(verified.error, "We couldn't verify your wallet. Please try again."));
       setConnected({ address: result.publicAddress, chain: result.chain });
       saveWalletSession({ address: result.publicAddress, chain: result.chain, verified: true, token: verified.data.session_token, expiresAt: verified.data.expires_at });
       toast.success("Wallet authenticated");
@@ -232,7 +252,7 @@ function ConnectWalletPage() {
           </div>
         )}
         <p className="q-connect-note">
-          Paper and sandbox environments only. Wallet connection never activates live trading.
+          Practice and testnet environments only. Connecting a wallet never activates live trading.
         </p>
       </section>
     </main>

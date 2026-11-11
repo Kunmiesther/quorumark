@@ -26,6 +26,7 @@ import {
   type Strategy,
 } from "@/lib/strategy-exchange";
 import { getWalletSession, quorumarkApi } from "@/lib/quorumark-api";
+import { WalletAccountMenu } from "@/components/wallet/WalletAccountMenu";
 
 export type ExchangeView =
   "marketplace" | "detail" | "studio" | "follower" | "subscriptions" | "verification";
@@ -86,7 +87,9 @@ function Shell({
           </Link>
         </nav>
         <div className="q-header-actions">
-          <button className="q-wallet-button" onClick={onWallet}>
+          <WalletAccountMenu />
+          {/* WalletAccountMenu owns the connected state and session actions. */}
+          <button className="q-wallet-button q-wallet-legacy-hidden" onClick={onWallet}>
             <Wallet size={16} />
             {wallet ? `${wallet.slice(0, 6)}…${wallet.slice(-4)}` : "Connect wallet"}
           </button>
@@ -185,6 +188,16 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
     setState(next);
     saveExchangeState(next);
   };
+
+  useEffect(() => {
+    const syncWallet = () => {
+      const session = getWalletSession();
+      setState((current) => ({ ...current, wallet: session?.address ?? null }));
+    };
+    syncWallet();
+    window.addEventListener("quorumark-wallet-session", syncWallet);
+    return () => window.removeEventListener("quorumark-wallet-session", syncWallet);
+  }, []);
 
   useEffect(() => {
     if (view !== "marketplace") return;
@@ -309,7 +322,7 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
         ...state,
         subscription: { strategyId: strategy.id, status: "active", receipt: result.id },
       });
-      toast.success("Sandbox access is active");
+      toast.success("Your practice subscription is active");
       navigate({ to: "/follower" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Subscription could not be created");
@@ -907,8 +920,8 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
           <label>
             Backtest source
             <select value={dataSource} onChange={(event) => setDataSource(event.target.value as "fixture" | "historical")}>
-              <option value="fixture">Fixture candles · reproducible offline run</option>
-              <option value="historical">Public historical OHLCV · BTCUSDT hourly</option>
+              <option value="fixture">Sample market data · repeatable test</option>
+              <option value="historical">Public historical market data · BTCUSDT hourly</option>
             </select>
           </label>
           {proposal && (
@@ -1115,7 +1128,7 @@ function Subscriptions({ state }: { state: ReturnType<typeof loadExchangeState> 
       <div className="q-panel q-subscription-row">
         <div>
           <span className="q-status">
-            <i /> {state.subscription ? "Active sandbox access" : "No active access"}
+            <i /> {state.subscription ? "Practice subscription active" : "No active subscription"}
           </span>
           <h2>{state.subscription ? "Aurora Breakout" : "Discover a strategy"}</h2>
           <p>
@@ -1214,7 +1227,7 @@ function Verification({
             <span>Paper record</span>
           </div>
           <p className="q-muted">
-            <Check size={14} /> Recomputed from backend ledger records. This is not a blockchain
+            <Check size={14} /> Recomputed from saved practice records. This is not a blockchain
             verified result.
           </p>
         </div>
