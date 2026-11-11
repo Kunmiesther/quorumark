@@ -44,7 +44,7 @@ services:
     runtime: node
     plan: free
     buildCommand: npm ci && npm run build
-    startCommand: node dist/server/server.js
+    startCommand: node scripts/serve-render.mjs
     envVars:
       - key: VITE_APP_URL
         sync: false
