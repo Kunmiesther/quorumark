@@ -29,11 +29,18 @@ settlement-verification requests. `NEAR_INTENTS_RELAY_URL` and
 `NEAR_INTENTS_API_KEY` are reserved for a future supported relay; empty values
 do not disable any current demo path because no relay is called.
 
-The current reference backtest uses deterministic, labeled fixture candles
-sent to the Python engine. `MARKET_DATA_API_KEY` is not read and no external
-market-data provider is contacted. The AI evaluation endpoint likewise uses
-deterministic safety logic; `AI_API_KEY` is not read and no model call is made
-in the current demo.
+The reference backtest supports two explicit data sources: deterministic,
+labeled fixture candles for offline runs, and the server-side Binance public
+klines adapter for historical OHLCV snapshots. The adapter records provider,
+symbol, interval, and source metadata; it never presents historical data as
+live performance. `MARKET_DATA_API_KEY` is not required by the public adapter.
+
+The AI strategy-proposal, refinement, analysis, and agent-assessment routes
+use a server-only OpenAI-compatible Responses API when `AI_PROVIDER=openai` or
+`openai_compatible`, `AI_API_KEY`, and `AI_MODEL` are configured. Outputs are
+strictly schema-validated and persisted as provenance records. With AI
+disabled or unavailable, these routes return an explicit unavailable error;
+they never substitute deterministic text while claiming a model was called.
 
 The native NEAR wallet path configures Meteor Wallet and My NEAR Wallet
 directly through Wallet Selector on testnet. `VITE_NEAR_WALLET_CONNECTOR_URL`
@@ -52,9 +59,9 @@ risk and evidence class, subscribe, configure limits, simulate a signal,
 inspect the paper execution, verify recomputed performance, and pause or
 cancel the subscription.
 
-The current evaluation notes are deterministic analysis aids around strategy
-research and inspection; there is no external AI model call. Quorumark does
-not claim autonomous trading or fabricated performance. The Python engine produces the genuine backtest and
+AI analysis is an explicitly configured, schema-validated aid around strategy
+research and inspection; when unavailable, the product says so. Quorumark
+does not claim autonomous trading or fabricated performance. The Python engine produces the genuine backtest and
 paper-execution results. Supabase stores authenticated identities, ownership,
 versions, subscriptions, and evidence with server-side authorization. NEAR
 Wallet Selector handles testnet authentication, and the narrow Rust contract

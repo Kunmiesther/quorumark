@@ -69,7 +69,19 @@ class PaperRepository:
                 network text not null, status text not null, transaction_hash text, transaction_receiver text,
                 block_height integer, receipt text, requested_at text not null, confirmed_at text
               );
+              create table if not exists ai_evaluations (
+                id text primary key, kind text not null, provider text not null,
+                model text not null, actor_id text not null, input text not null,
+                output text not null, status text not null, created_at text not null
+              );
             """)
+
+    def save_ai_evaluation(self, record: dict[str, Any]) -> None:
+        with self._connect() as db:
+            db.execute(
+                "insert into ai_evaluations values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (str(uuid.uuid4()), record["kind"], record["provider"], record["model"], record["actor_id"], json.dumps(record["input"], sort_keys=True), json.dumps(record["output"], sort_keys=True), record["status"], record["created_at"]),
+            )
 
     def save_backtest(self, run_id: str, strategy_version: str, source: str, payload: dict[str, Any], created_at: str) -> None:
         with self._connect() as db:

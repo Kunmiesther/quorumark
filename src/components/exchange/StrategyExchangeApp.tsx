@@ -156,6 +156,23 @@ type BackendStrategyRecord = {
   created_at: string;
 };
 
+type StrategyProposal = {
+  name: string;
+  description: string;
+  thesis: string;
+  instruments: string[];
+  timeframe: string;
+  indicators: { name: string; parameters: Record<string, number | string>; purpose: string }[];
+  entry_conditions: string[];
+  exit_conditions: string[];
+  stop_loss: string;
+  take_profit: string;
+  position_sizing: string;
+  risk_constraints: string[];
+  unsupported_assumptions: string[];
+  rationale: string;
+};
+
 export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?: string }) {
   const navigate = useNavigate();
   const [state, setState] = useState(loadExchangeState);
@@ -642,6 +659,12 @@ function Detail({ strategy, onSubscribe }: { strategy: Strategy; onSubscribe: ()
 function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }) {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [name, setName] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [proposal, setProposal] = useState<StrategyProposal | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [dataSource, setDataSource] = useState<"fixture" | "historical">("fixture");
+  const [dataSourceLabel, setDataSourceLabel] = useState("quorumark_fixture");
+  const [backtestId, setBacktestId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedStrategyId, setSavedStrategyId] = useState<string | null>(null);
@@ -650,6 +673,32 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
   const [anchoring, setAnchoring] = useState(false);
   const [publicationEvidence, setPublicationEvidence] = useState<{ status: string; transaction_hash?: string } | null>(null);
   const [publishing, setPublishing] = useState(false);
+  async function generateProposal() {
+    const wallet = getWalletSession();
+    if (!wallet) {
+      setError("Authenticate a NEAR wallet before asking the strategy agent for a proposal.");
+      return;
+    }
+    if (!prompt.trim()) {
+      setError("Describe the strategy you want the agent to shape.");
+      return;
+    }
+    setAiBusy(true);
+    setError(null);
+    try {
+      const result = await quorumarkApi<{ proposal: StrategyProposal }>("/v1/ai/strategy-proposals", {
+        method: "POST",
+        body: JSON.stringify({ prompt, current_proposal: proposal }),
+      });
+      setProposal(result.proposal);
+      setName(result.proposal.name);
+      toast.success(proposal ? "Strategy proposal refined" : "Strategy proposal ready for review");
+    } catch (aiError) {
+      setError(aiError instanceof Error ? aiError.message : "AI strategy assistance is unavailable");
+    } finally {
+      setAiBusy(false);
+    }
+  }
   async function runBacktest() {
     if (!PUBLIC_PYTHON_BACKEND_URL) {
       setError("Strategy testing is not configured. Start the local paper engine first.");
@@ -657,8 +706,17 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
     }
     setBusy(true);
     setError(null);
-    const candles = buildFixtureCandles();
     try {
+      let candles = buildFixtureCandles();
+      let source = "quorumark_fixture";
+      if (dataSource === "historical") {
+        const historical = await quorumarkApi<{ candles: typeof candles; provenance: { source: string } }>(
+          "/v1/market-data/historical?symbol=BTCUSDT&interval=1h&limit=200",
+        );
+        candles = historical.candles;
+        source = historical.provenance.source;
+      }
+      setDataSourceLabel(source);
       const response = await fetch(
         `${PUBLIC_PYTHON_BACKEND_URL.replace(/\/$/, "")}/v1/backtests/reference`,
         {
@@ -666,7 +724,7 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             candles,
-            source: "quorumark_fixture",
+            source,
             strategy: {
               fast_window: 3,
               slow_window: 8,
@@ -679,6 +737,7 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
       );
       if (!response.ok) throw new Error(`Strategy testing returned HTTP ${response.status}`);
       const result = await response.json();
+      setBacktestId(result.backtest_id ?? null);
       setMetrics({
         returnPct: result.performance.return_pct,
         winRate: result.performance.win_rate_pct,
@@ -720,14 +779,13 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
             method: "POST",
             body: JSON.stringify({
               name,
-              thesis:
-                "A creator-defined reference strategy tested against labeled fixture candles.",
+              thesis: proposal?.thesis ?? "A creator-defined strategy tested against labeled market data.",
               market: "Crypto spot",
-              supported_assets: ["BTC", "ETH"],
+              supported_assets: proposal?.instruments ?? ["BTC", "ETH"],
               risk_class: "medium",
               cadence: "Every 4 hours",
               monthly_price: 0,
-              definition: { type: "reference_crossover", source: "quorumark_fixture" },
+              definition: { type: "compiled_strategy_proposal", source: dataSourceLabel, proposal },
             }),
           });
       setSavedStrategyId(created.id);
@@ -735,8 +793,8 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
         method: "POST",
         body: JSON.stringify({
           version: "v1.0",
-          definition: { type: "reference_crossover", source: "quorumark_fixture" },
-          backtest_id: "studio-result",
+          definition: { type: "compiled_strategy_proposal", source: dataSourceLabel, proposal },
+          backtest_id: backtestId,
           backtest_metrics: metrics,
         }),
       });
@@ -824,7 +882,11 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
           </label>
           <label>
             Strategy description
-            <textarea defaultValue="A rules based strategy with confirmed entries, explicit exits, and a defined risk budget." />
+            <textarea
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              placeholder="Build a BTC momentum strategy that follows the medium-term trend, avoids high-volatility conditions, and uses conservative position sizing."
+            />
           </label>
           <div className="q-form-row">
             <label>
@@ -836,8 +898,31 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
               <input defaultValue="Every 4 hours" />
             </label>
           </div>
+          <div className="q-studio-agent-actions">
+            <button className="q-primary" disabled={aiBusy} onClick={generateProposal}>
+              {aiBusy ? "Thinking through the method…" : proposal ? "Refine with the strategy agent" : "Shape this with AI"} <ArrowRight size={16} />
+            </button>
+            <span>AI proposal only · review before it becomes a version</span>
+          </div>
+          <label>
+            Backtest source
+            <select value={dataSource} onChange={(event) => setDataSource(event.target.value as "fixture" | "historical")}>
+              <option value="fixture">Fixture candles · reproducible offline run</option>
+              <option value="historical">Binance public history · BTCUSDT hourly</option>
+            </select>
+          </label>
+          {proposal && (
+            <div className="q-notice q-ai-proposal">
+              <ShieldCheck size={16} />
+              <div>
+                <strong>{proposal.name}</strong>
+                <p>{proposal.thesis}</p>
+                <small>{proposal.timeframe} · {proposal.indicators.map((item) => item.name).join(", ") || "No indicators specified"}</small>
+              </div>
+            </div>
+          )}
           <button className="q-primary" disabled={busy} onClick={runBacktest}>
-            {busy ? "Testing your strategy…" : "Test my strategy"} <Play size={16} />
+            {busy ? "Running the deterministic engine…" : "Run backtest"} <Play size={16} />
           </button>
           {error && (
             <div className="q-notice q-notice-error">
@@ -869,8 +954,7 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
                 <Metric label="Costs" value={`$${fmt(metrics.costs)}`} />
               </div>
               <div className="q-notice">
-                <ShieldCheck size={16} /> Calculated from the paper simulation and labeled
-                backtested
+                <ShieldCheck size={16} /> Calculated by the deterministic engine · {dataSourceLabel}
               </div>
               <div className="q-studio-actions">
                 <button className="q-secondary" onClick={() => saveDraft()} disabled={publishing}>

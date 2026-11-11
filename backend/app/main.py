@@ -7,9 +7,10 @@ from datetime import datetime, timezone
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from .agents import evaluate_strategy
+from .ai import AIProviderError, AIUnavailableError, StrategyProposal, analyze_strategy, evaluate_agent, generate_strategy_proposal
+from .historical_data import HistoricalDataError, fetch_binance_klines
 from .engine import run_reference_backtest
-from .models import AgentEvaluationRequest, AgentEvaluationResponse, BacktestRequest, BacktestResponse, PaperExecutionRequest, PaperExecutionResponse
+from .models import AIAnalysisRequest, AIAnalysisResponse, AIProposalRequest, AIProposalResponse, AgentEvaluationRequest, AgentEvaluationResponse, BacktestRequest, BacktestResponse, HistoricalDataQuery, PaperExecutionRequest, PaperExecutionResponse
 from .paper import process_paper_signal
 from .repository import PaperRepository
 from .supabase_repository import SupabaseRepository
@@ -66,6 +67,43 @@ def paper_executions(identity: str = Depends(require_verified_identity)) -> list
 @app.get("/v1/strategies")
 def strategies() -> list[dict[str, object]]:
     return [to_public_strategy(item) for item in repository.list_strategies()]
+
+
+@app.get("/v1/market-data/historical")
+def historical_market_data(query: HistoricalDataQuery = Depends()) -> dict[str, object]:
+    try:
+        candles, provenance = fetch_binance_klines(query.symbol, query.interval, query.limit)
+    except HistoricalDataError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    return {"candles": [candle.model_dump(mode="json") for candle in candles], "provenance": provenance}
+
+
+@app.post("/v1/ai/strategy-proposals", response_model=AIProposalResponse)
+def strategy_proposal(request: AIProposalRequest, identity: str = Depends(require_local_identity)) -> AIProposalResponse:
+    current = None
+    if request.current_proposal:
+        try:
+            current = StrategyProposal.model_validate(request.current_proposal)
+        except Exception as error:
+            raise HTTPException(status_code=422, detail="Current strategy proposal is invalid") from error
+    try:
+        proposal, provenance = generate_strategy_proposal(request.prompt, current)
+    except (AIUnavailableError, AIProviderError, ValueError) as error:
+        status = 503 if isinstance(error, AIUnavailableError) else 422
+        raise HTTPException(status_code=status, detail=str(error)) from error
+    repository.save_ai_evaluation({"kind": "strategy_proposal", "provider": provenance["provider"], "model": provenance["model"], "actor_id": identity.removeprefix("near:"), "input": {"prompt": request.prompt, "refinement": bool(current)}, "output": proposal.model_dump(mode="json"), "status": "completed", "created_at": datetime.now(timezone.utc).isoformat()})
+    return AIProposalResponse(proposal=proposal.model_dump(mode="json"), provenance=provenance)
+
+
+@app.post("/v1/ai/strategy-analysis", response_model=AIAnalysisResponse)
+def strategy_analysis(request: AIAnalysisRequest, identity: str = Depends(require_local_identity)) -> AIAnalysisResponse:
+    try:
+        analysis, provenance = analyze_strategy(request.strategy, request.metrics, request.question)
+    except (AIUnavailableError, AIProviderError, ValueError) as error:
+        status = 503 if isinstance(error, AIUnavailableError) else 422
+        raise HTTPException(status_code=status, detail=str(error)) from error
+    repository.save_ai_evaluation({"kind": "strategy_analysis", "provider": provenance["provider"], "model": provenance["model"], "actor_id": identity.removeprefix("near:"), "input": {"strategy": request.strategy, "metrics": request.metrics, "question": request.question}, "output": analysis.model_dump(mode="json"), "status": "completed", "created_at": datetime.now(timezone.utc).isoformat()})
+    return AIAnalysisResponse(analysis=analysis.model_dump(mode="json"), provenance=provenance)
 
 
 @app.get("/v1/strategies/mine")
@@ -219,5 +257,16 @@ def get_policy(identity: str = Depends(require_local_identity)) -> dict[str, obj
 
 
 @app.post("/v1/agents/evaluate", response_model=AgentEvaluationResponse)
-def agent_evaluation(request: AgentEvaluationRequest) -> AgentEvaluationResponse:
-    return evaluate_strategy(request)
+def agent_evaluation(request: AgentEvaluationRequest, identity: str = Depends(require_local_identity)) -> AgentEvaluationResponse:
+    try:
+        assessment, provenance = evaluate_agent(
+            {"name": request.strategy_name, "thesis": request.thesis, "risk_class": request.risk_class, **request.strategy},
+            request.metrics,
+            request.market_observations,
+        )
+    except (AIUnavailableError, AIProviderError) as error:
+        status = 503 if isinstance(error, AIUnavailableError) else 422
+        raise HTTPException(status_code=status, detail=str(error)) from error
+    action = "no_action" if request.risk_class == "high" and assessment.action == "accept" else assessment.action
+    repository.save_ai_evaluation({"kind": "agent_evaluation", "provider": provenance["provider"], "model": provenance["model"], "actor_id": identity.removeprefix("near:"), "input": request.model_dump(mode="json"), "output": {**assessment.model_dump(mode="json"), "deterministic_action": action}, "status": "completed", "created_at": datetime.now(timezone.utc).isoformat()})
+    return AgentEvaluationResponse(provider=provenance["provider"], model=provenance["model"], strategy_name=request.strategy_name, risk_notes=assessment.risks, action=action, signal_reason=assessment.signal_reason, rationale=assessment.rationale)

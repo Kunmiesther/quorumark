@@ -32,6 +32,23 @@ def test_protected_marketplace_rejects_missing_verified_session():
     assert response.status_code == 401
 
 
+def test_ai_routes_fail_closed_when_provider_is_unavailable(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "disabled")
+    response = TestClient(app).post(
+        "/v1/ai/strategy-proposals",
+        headers={"x-quorumark-identity": "near:creator.testnet"},
+        json={"prompt": "Build a conservative BTC trend strategy."},
+    )
+    assert response.status_code == 503
+    assert "unavailable" in response.json()["detail"].lower()
+
+
+def test_historical_data_rejects_invalid_symbols_without_provider_call():
+    response = TestClient(app).get("/v1/market-data/historical?symbol=bad-symbol&interval=1h&limit=10")
+    assert response.status_code == 502
+    assert "symbol" in response.json()["detail"].lower()
+
+
 def test_local_marketplace_creator_lifecycle_is_owner_scoped(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(main, "repository", PaperRepository(str(tmp_path / "marketplace.db")))
     client = TestClient(app)

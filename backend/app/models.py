@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -183,10 +183,44 @@ class AgentEvaluationRequest(BaseModel):
     strategy_name: str = Field(min_length=1, max_length=120)
     thesis: str = Field(min_length=1, max_length=2_000)
     risk_class: Literal["low", "medium", "high"]
+    strategy: dict[str, Any] = Field(default_factory=dict)
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    market_observations: dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentEvaluationResponse(BaseModel):
-    provider: Literal["disabled", "configured"]
+    provider: Literal["openai", "openai_compatible"]
+    model: str
     strategy_name: str
     risk_notes: list[str]
+    action: Literal["accept", "reject", "no_action"]
+    signal_reason: str
+    rationale: str
     needs_human_review: bool = True
+
+
+class AIProposalRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=4_000)
+    current_proposal: dict[str, Any] | None = None
+
+
+class AIProposalResponse(BaseModel):
+    proposal: dict[str, Any]
+    provenance: dict[str, str]
+
+
+class AIAnalysisRequest(BaseModel):
+    strategy: dict[str, Any]
+    metrics: dict[str, Any]
+    question: str = Field(default="Explain the main risks and observations.", max_length=2_000)
+
+
+class AIAnalysisResponse(BaseModel):
+    analysis: dict[str, Any]
+    provenance: dict[str, str]
+
+
+class HistoricalDataQuery(BaseModel):
+    symbol: str = Field(default="BTCUSDT", min_length=5, max_length=20)
+    interval: str = Field(default="1h", min_length=2, max_length=4)
+    limit: int = Field(default=200, ge=10, le=1_000)

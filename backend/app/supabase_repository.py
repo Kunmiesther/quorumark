@@ -44,6 +44,9 @@ class SupabaseRepository:
             body["strategy_version_id"] = strategy_version
         self._request("POST", "strategy_exchange_backtest_runs", body=body, prefer="resolution=merge-duplicates")
 
+    def save_ai_evaluation(self, record: dict[str, Any]) -> None:
+        self._request("POST", "strategy_exchange_ai_evaluations", body=record, prefer="return=representation")
+
     def find_execution(self, key: str) -> dict[str, Any] | None:
         rows = self._request("GET", "strategy_exchange_paper_executions", params={"idempotency_key": f"eq.{key}", "select": "payload"})
         return rows[0].get("payload") if rows else None

@@ -232,7 +232,8 @@ button {
 }
 .q-search-row input,
 .q-form input,
-.q-form textarea {
+.q-form textarea,
+.q-form select {
   width: 100%;
   border: 1px solid rgba(241, 240, 232, 0.16);
   border-radius: 10px;
@@ -247,6 +248,10 @@ button {
 .q-search-row input:focus,
 .q-form input:focus,
 .q-form textarea:focus {
+  border-color: var(--q-cyan);
+  box-shadow: 0 0 0 3px rgba(56, 217, 230, 0.12);
+}
+.q-form select:focus {
   border-color: var(--q-cyan);
   box-shadow: 0 0 0 3px rgba(56, 217, 230, 0.12);
 }
@@ -502,6 +507,35 @@ button {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+.q-studio-agent-actions {
+  display: grid;
+  gap: 8px;
+}
+.q-studio-agent-actions > span {
+  color: rgba(241, 240, 232, 0.42);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.q-ai-proposal {
+  align-items: flex-start;
+  border-color: rgba(56, 217, 230, 0.35);
+  color: var(--q-cyan);
+}
+.q-ai-proposal strong,
+.q-ai-proposal p,
+.q-ai-proposal small {
+  display: block;
+}
+.q-ai-proposal p {
+  margin: 5px 0;
+  color: rgba(241, 240, 232, 0.7);
+  line-height: 1.45;
+}
+.q-ai-proposal small {
+  color: rgba(241, 240, 232, 0.45);
+  font-family: var(--font-mono);
+  font-size: 10px;
 }
 .q-subscription-row {
   display: flex;
