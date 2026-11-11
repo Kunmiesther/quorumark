@@ -23,7 +23,22 @@ Every execution in this repository is paper, sandbox, or explicitly supported te
 
 Wallet challenge and signature verification are isolated in the two retained Supabase Edge Functions. Wallet connection alone is not treated as a production trading authorization. Native NEAR wallet selector/session exchange remains configuration-dependent and is surfaced honestly when unavailable.
 
-NEAR Intents is isolated in `src/lib/near-intents-adapter.ts`. It refuses quote or settlement claims until a supported relay, route, and credentials are configured; it never fabricates a transaction hash.
+NEAR Intents is isolated in `src/lib/near-intents-adapter.ts`. The current
+sandbox adapter deliberately refuses quote, transaction-preparation, and
+settlement-verification requests. `NEAR_INTENTS_RELAY_URL` and
+`NEAR_INTENTS_API_KEY` are reserved for a future supported relay; empty values
+do not disable any current demo path because no relay is called.
+
+The current reference backtest uses deterministic, labeled fixture candles
+sent to the Python engine. `MARKET_DATA_API_KEY` is not read and no external
+market-data provider is contacted. The AI evaluation endpoint likewise uses
+deterministic safety logic; `AI_API_KEY` is not read and no model call is made
+in the current demo.
+
+The native NEAR wallet path configures Meteor Wallet and My NEAR Wallet
+directly through Wallet Selector on testnet. `VITE_NEAR_WALLET_CONNECTOR_URL`
+is not used and is intentionally absent from `.env.example`; a custom
+connector URL is not required for the current wallet flow.
 
 ## Hackathon walkthrough
 
@@ -37,9 +52,9 @@ risk and evidence class, subscribe, configure limits, simulate a signal,
 inspect the paper execution, verify recomputed performance, and pause or
 cancel the subscription.
 
-AI-assisted evaluation is presented as an analysis aid around strategy
-research and inspection; Quorumark does not claim autonomous trading or
-fabricated performance. The Python engine produces the genuine backtest and
+The current evaluation notes are deterministic analysis aids around strategy
+research and inspection; there is no external AI model call. Quorumark does
+not claim autonomous trading or fabricated performance. The Python engine produces the genuine backtest and
 paper-execution results. Supabase stores authenticated identities, ownership,
 versions, subscriptions, and evidence with server-side authorization. NEAR
 Wallet Selector handles testnet authentication, and the narrow Rust contract
