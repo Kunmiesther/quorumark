@@ -6,7 +6,9 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", ".output", ".vinxi", "node_modules"] },
+  // The Python service is validated by pytest; excluding it also avoids
+  // traversing pytest's protected temporary release directory.
+  { ignores: ["dist", ".output", ".vinxi", "node_modules", "backend"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
