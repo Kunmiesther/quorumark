@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .ai import AIProviderError, AIUnavailableError, StrategyProposal, analyze_strategy, evaluate_agent, generate_strategy_proposal
-from .historical_data import HistoricalDataError, fetch_binance_klines
+from .historical_data import HistoricalDataError, fetch_historical
 from .engine import run_reference_backtest
 from .models import AIAnalysisRequest, AIAnalysisResponse, AIProposalRequest, AIProposalResponse, AgentEvaluationRequest, AgentEvaluationResponse, BacktestRequest, BacktestResponse, HistoricalDataQuery, PaperExecutionRequest, PaperExecutionResponse
 from .paper import process_paper_signal
@@ -72,7 +72,7 @@ def strategies() -> list[dict[str, object]]:
 @app.get("/v1/market-data/historical")
 def historical_market_data(query: HistoricalDataQuery = Depends()) -> dict[str, object]:
     try:
-        candles, provenance = fetch_binance_klines(query.symbol, query.interval, query.limit)
+        candles, provenance = fetch_historical(query.symbol, query.interval, query.limit)
     except HistoricalDataError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
     return {"candles": [candle.model_dump(mode="json") for candle in candles], "provenance": provenance}

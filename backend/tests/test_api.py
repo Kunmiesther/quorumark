@@ -4,6 +4,7 @@ from pathlib import Path
 from app.main import app
 from app import main
 from app.repository import PaperRepository
+from app import ai
 
 
 def test_health_is_paper_only():
@@ -41,6 +42,40 @@ def test_ai_routes_fail_closed_when_provider_is_unavailable(monkeypatch):
     )
     assert response.status_code == 503
     assert "unavailable" in response.json()["detail"].lower()
+
+
+def test_gemini_provider_parses_structured_output_without_exposing_key(monkeypatch):
+    proposal = {
+        "name": "BTC Trend",
+        "description": "A conservative trend-following strategy for BTC.",
+        "thesis": "Follow confirmed medium-term momentum while limiting risk.",
+        "instruments": ["BTCUSDT"],
+        "timeframe": "1h",
+        "indicators": [{"name": "EMA", "parameters": {"fast": 20, "slow": 50}, "purpose": "Trend direction"}],
+        "entry_conditions": ["Fast EMA is above slow EMA"],
+        "exit_conditions": ["Fast EMA crosses below slow EMA"],
+        "stop_loss": "Use a fixed 2 percent stop.",
+        "take_profit": "Use a fixed 4 percent target.",
+        "position_sizing": "Risk at most 0.5 percent of paper equity.",
+        "risk_constraints": ["No leverage", "Maximum one open position"],
+        "unsupported_assumptions": [],
+        "rationale": "The proposal translates the creator request into inspectable rules.",
+    }
+
+    class FakeResponse:
+        status_code = 200
+        is_success = True
+
+        def json(self):
+            return {"candidates": [{"content": {"parts": [{"text": __import__("json").dumps(proposal)}]}}]}
+
+    monkeypatch.setenv("AI_PROVIDER", "gemini")
+    monkeypatch.setenv("AI_API_KEY", "server-only-test-key")
+    monkeypatch.setenv("AI_MODEL", "gemini-2.5-flash-lite")
+    monkeypatch.setattr(ai.httpx, "post", lambda *args, **kwargs: FakeResponse())
+    result, provenance = ai.generate_strategy_proposal("Build a conservative BTC trend strategy.")
+    assert result.name == "BTC Trend"
+    assert provenance == {"provider": "gemini", "model": "gemini-2.5-flash-lite"}
 
 
 def test_historical_data_rejects_invalid_symbols_without_provider_call():

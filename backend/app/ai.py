@@ -148,7 +148,7 @@ def _config() -> tuple[str, str, str, int, float]:
     timeout = float(os.getenv("AI_REQUEST_TIMEOUT_SECONDS", "30"))
     if provider in {"", "disabled"}:
         raise AIUnavailableError("AI strategy assistance is unavailable: AI_PROVIDER is disabled")
-    if provider not in {"openai", "openai_compatible"}:
+    if provider not in {"openai", "openai_compatible", "gemini"}:
         raise AIUnavailableError(f"AI strategy assistance is unavailable: unsupported provider '{provider}'")
     if not api_key or not model:
         raise AIUnavailableError("AI strategy assistance is unavailable: provider credentials or AI_MODEL are missing")
@@ -171,16 +171,52 @@ def _output_text(payload: dict[str, Any]) -> str:
     raise AIProviderError("AI provider returned no structured output")
 
 
+def _gemini_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Reduce our JSON Schema to Gemini's documented structured-output subset."""
+    allowed = {"type", "description", "enum", "properties", "required", "items"}
+    result = {key: value for key, value in schema.items() if key in allowed}
+    if isinstance(schema.get("properties"), dict):
+        result["properties"] = {key: _gemini_schema(value) for key, value in schema["properties"].items()}
+    if isinstance(schema.get("items"), dict):
+        result["items"] = _gemini_schema(schema["items"])
+    if isinstance(schema.get("type"), list):
+        result["type"] = schema["type"]
+    return result
+
+
+def _gemini_output_text(payload: dict[str, Any]) -> str:
+    candidates = payload.get("candidates")
+    if not isinstance(candidates, list) or not candidates:
+        raise AIProviderError("Gemini returned no candidate output")
+    parts = candidates[0].get("content", {}).get("parts", [])
+    chunks = [part["text"] for part in parts if isinstance(part, dict) and isinstance(part.get("text"), str)]
+    if not chunks:
+        raise AIProviderError("Gemini returned no structured output")
+    return "".join(chunks)
+
+
 def _request(schema_name: str, schema: dict[str, Any], instruction: str) -> tuple[dict[str, Any], dict[str, str]]:
     api_key, api_url, model, limit, timeout = _config()
     _rate_gate.check(limit)
-    body = {
-        "model": model,
-        "input": [{"role": "system", "content": "You are a careful financial research assistant. Return only the requested JSON object. Never emit executable code. Separate observed facts, calculated metrics, and suggestions."}, {"role": "user", "content": instruction}],
-        "text": {"format": {"type": "json_schema", "name": schema_name, "strict": True, "schema": schema}},
-    }
+    provider = os.getenv("AI_PROVIDER", "").strip().lower()
+    if provider == "gemini":
+        body = {
+            "systemInstruction": {"parts": [{"text": "You are a careful financial research assistant. Return only the requested JSON object. Never emit executable code. Separate observed facts, calculated metrics, and suggestions."}]},
+            "contents": [{"role": "user", "parts": [{"text": instruction}]}],
+            "generationConfig": {"responseMimeType": "application/json", "responseSchema": _gemini_schema(schema), "temperature": 0.2},
+        }
+        url = api_url.rstrip("/") + f"/v1beta/models/{model}:generateContent" if "/models/" not in api_url else api_url
+        headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
+    else:
+        body = {
+            "model": model,
+            "input": [{"role": "system", "content": "You are a careful financial research assistant. Return only the requested JSON object. Never emit executable code. Separate observed facts, calculated metrics, and suggestions."}, {"role": "user", "content": instruction}],
+            "text": {"format": {"type": "json_schema", "name": schema_name, "strict": True, "schema": schema}},
+        }
+        url = api_url
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     try:
-        response = httpx.post(api_url, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json=body, timeout=timeout)
+        response = httpx.post(url, headers=headers, json=body, timeout=timeout)
     except httpx.HTTPError as error:
         raise AIUnavailableError("AI provider request failed") from error
     if response.status_code in {401, 403}:
@@ -190,8 +226,10 @@ def _request(schema_name: str, schema: dict[str, Any], instruction: str) -> tupl
     if not response.is_success:
         raise AIProviderError(f"AI provider returned HTTP {response.status_code}")
     try:
-        raw = json.loads(_output_text(response.json()))
-        return raw, {"provider": os.getenv("AI_PROVIDER", "").strip().lower(), "model": model}
+        payload = response.json()
+        text = _gemini_output_text(payload) if provider == "gemini" else _output_text(payload)
+        raw = json.loads(text)
+        return raw, {"provider": provider, "model": model}
     except (json.JSONDecodeError, ValidationError, TypeError, ValueError) as error:
         raise AIProviderError("AI provider returned invalid JSON") from error
 

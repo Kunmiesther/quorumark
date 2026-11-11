@@ -30,17 +30,27 @@ settlement-verification requests. `NEAR_INTENTS_RELAY_URL` and
 do not disable any current demo path because no relay is called.
 
 The reference backtest supports two explicit data sources: deterministic,
-labeled fixture candles for offline runs, and the server-side Binance public
-klines adapter for historical OHLCV snapshots. The adapter records provider,
-symbol, interval, and source metadata; it never presents historical data as
-live performance. `MARKET_DATA_API_KEY` is not required by the public adapter.
+labeled fixture candles for offline runs, and a server-side public historical
+OHLCV adapter. Set `MARKET_DATA_PROVIDER=binance_public` or
+`kraken_public`; these public adapters require no API key and record provider,
+symbol, interval, and source metadata. If a provider is unreachable, the API
+returns an error; it never substitutes fixture candles or presents history as
+live performance. `MARKET_DATA_API_KEY` is not required by either adapter.
 
 The AI strategy-proposal, refinement, analysis, and agent-assessment routes
-use a server-only OpenAI-compatible Responses API when `AI_PROVIDER=openai` or
-`openai_compatible`, `AI_API_KEY`, and `AI_MODEL` are configured. Outputs are
+use a server-only Gemini GenerateContent API when `AI_PROVIDER=gemini`, or an
+OpenAI-compatible Responses API when `AI_PROVIDER=openai` or
+`openai_compatible`, with `AI_API_KEY` and `AI_MODEL` configured. Outputs are
 strictly schema-validated and persisted as provenance records. With AI
 disabled or unavailable, these routes return an explicit unavailable error;
 they never substitute deterministic text while claiming a model was called.
+For the zero-cost Gemini path, create a key in the official Google AI Studio
+(`https://aistudio.google.com/apikey`), without linking a paid billing project,
+then set `AI_PROVIDER=gemini`, `AI_API_KEY` server-side, and
+`AI_MODEL=gemini-2.5-flash-lite`. Free-tier model access and quotas are
+account/region dependent; the API returns an unavailable error when the key,
+quota, or selected model is not eligible. Do not paste the key into the
+browser or commit it.
 
 The native NEAR wallet path configures Meteor Wallet and My NEAR Wallet
 directly through Wallet Selector on testnet. `VITE_NEAR_WALLET_CONNECTOR_URL`

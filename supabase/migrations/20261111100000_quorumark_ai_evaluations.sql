@@ -15,5 +15,6 @@ create table if not exists public.strategy_exchange_ai_evaluations (
 );
 
 alter table public.strategy_exchange_ai_evaluations enable row level security;
+drop policy if exists "actors see own ai evaluations" on public.strategy_exchange_ai_evaluations;
 create policy "actors see own ai evaluations" on public.strategy_exchange_ai_evaluations
   for select using (actor_id = auth.uid());

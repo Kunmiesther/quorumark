@@ -189,7 +189,7 @@ class AgentEvaluationRequest(BaseModel):
 
 
 class AgentEvaluationResponse(BaseModel):
-    provider: Literal["openai", "openai_compatible"]
+    provider: Literal["openai", "openai_compatible", "gemini"]
     model: str
     strategy_name: str
     risk_notes: list[str]

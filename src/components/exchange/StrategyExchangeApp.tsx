@@ -908,7 +908,7 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
             Backtest source
             <select value={dataSource} onChange={(event) => setDataSource(event.target.value as "fixture" | "historical")}>
               <option value="fixture">Fixture candles · reproducible offline run</option>
-              <option value="historical">Binance public history · BTCUSDT hourly</option>
+              <option value="historical">Public historical OHLCV · BTCUSDT hourly</option>
             </select>
           </label>
           {proposal && (
