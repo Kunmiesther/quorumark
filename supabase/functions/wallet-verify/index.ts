@@ -52,6 +52,22 @@ function serviceRoleKey(): string | undefined {
   }
 }
 
+async function nearKeyBelongsToAccount(accountId: string, publicKey: string): Promise<boolean> {
+  const rpcUrl = Deno.env.get("VITE_NEAR_RPC_URL") ?? "https://rpc.testnet.near.org";
+  try {
+    const response = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: "quorumark-wallet-key", method: "query", params: { request_type: "view_access_key", finality: "final", account_id: accountId, public_key: publicKey } }),
+    });
+    if (!response.ok) return false;
+    const payload = await response.json() as { result?: { permission?: unknown }; error?: unknown };
+    return payload.result?.permission !== undefined && payload.error === undefined;
+  } catch {
+    return false;
+  }
+}
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -103,6 +119,9 @@ Deno.serve(async (req) => {
     recipient: chal.recipient ?? new URL(SUPABASE_URL).hostname,
   });
   if (!vres.ok) return fail(400, vres.code, vres.message);
+  if (chain === "near" && !(await nearKeyBelongsToAccount(publicAddress, publicKey))) {
+    return fail(400, "ACCOUNT_KEY_NOT_FOUND", "The signing key is not registered on this NEAR account.");
+  }
 
   const now = new Date().toISOString();
   // Look for an existing row for this chain and address; reactivate or insert.
