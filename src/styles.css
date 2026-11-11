@@ -659,6 +659,15 @@ button {
   border-top: 1px solid rgba(241, 240, 232, 0.1);
   color: var(--q-amber);
 }
+.q-analysis-button {
+  margin: 12px 0;
+}
+.q-ai-analysis {
+  align-items: flex-start;
+}
+.q-ai-analysis p {
+  margin: 4px 0 6px;
+}
 .q-landing-hero {
   width: min(1220px, calc(100% - 48px));
   min-height: 700px;

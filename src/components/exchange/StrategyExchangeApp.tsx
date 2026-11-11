@@ -176,6 +176,15 @@ type StrategyProposal = {
   rationale: string;
 };
 
+type StrategyAnalysis = {
+  observed_facts: string[];
+  calculated_metrics: string[];
+  risks: string[];
+  suggestions: string[];
+  action: "accept" | "reject" | "no_action";
+  rationale: string;
+};
+
 export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?: string }) {
   const navigate = useNavigate();
   const [state, setState] = useState(loadExchangeState);
@@ -674,6 +683,7 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
   const [name, setName] = useState("");
   const [prompt, setPrompt] = useState("");
   const [proposal, setProposal] = useState<StrategyProposal | null>(null);
+  const [analysis, setAnalysis] = useState<StrategyAnalysis | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [dataSource, setDataSource] = useState<"fixture" | "historical">("fixture");
   const [dataSourceLabel, setDataSourceLabel] = useState("quorumark_fixture");
@@ -759,6 +769,7 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
         costs: result.performance.fees,
         equity: result.equity_curve,
       });
+      setAnalysis(null);
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -767,6 +778,31 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
       );
     } finally {
       setBusy(false);
+    }
+  }
+  async function analyzeResults() {
+    const wallet = getWalletSession();
+    if (!wallet) {
+      setError("Verify your wallet before asking for an explanation.");
+      return;
+    }
+    if (!proposal || !metrics) {
+      setError("Create and test a strategy before asking for an explanation.");
+      return;
+    }
+    setAiBusy(true);
+    setError(null);
+    try {
+      const result = await quorumarkApi<{ analysis: StrategyAnalysis }>("/v1/ai/strategy-analysis", {
+        method: "POST",
+        body: JSON.stringify({ strategy: proposal, metrics, question: "Explain the observed performance, main risks, and the safest next improvement." }),
+      });
+      setAnalysis(result.analysis);
+      toast.success("Your test results have been explained");
+    } catch (analysisError) {
+      setError(analysisError instanceof Error ? analysisError.message : "The results could not be explained right now.");
+    } finally {
+      setAiBusy(false);
     }
   }
   async function saveDraft(publish = false) {
@@ -967,8 +1003,21 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
                 <Metric label="Costs" value={`$${fmt(metrics.costs)}`} />
               </div>
               <div className="q-notice">
-                <ShieldCheck size={16} /> Calculated by the deterministic engine · {dataSourceLabel}
+                <ShieldCheck size={16} /> Calculated by the paper engine · {dataSourceLabel}
               </div>
+              <button className="q-secondary q-analysis-button" onClick={analyzeResults} disabled={aiBusy}>
+                {aiBusy ? "Preparing an explanation…" : analysis ? "Refresh explanation" : "Explain these results"}
+              </button>
+              {analysis && (
+                <div className="q-notice q-ai-analysis">
+                  <ShieldCheck size={16} />
+                  <div>
+                    <strong>What the strategy agent sees</strong>
+                    <p>{analysis.rationale}</p>
+                    {analysis.risks.length > 0 && <small>Watch for: {analysis.risks.join(" · ")}</small>}
+                  </div>
+                </div>
+              )}
               <div className="q-studio-actions">
                 <button className="q-secondary" onClick={() => saveDraft()} disabled={publishing}>
                   {publishing ? "Saving…" : "Save draft"}
