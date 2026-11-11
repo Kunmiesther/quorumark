@@ -315,7 +315,7 @@ export function StrategyExchangeLanding() {
         </details>
       </section>
       <footer className="q-landing-footer">
-        <QuorumarkLogo />
+        <Link to="/" aria-label="Quorumark home"><QuorumarkLogo /></Link>
         <span>Quorumark Strategy Exchange · paper and testnet environments only</span>
       </footer>
     </main>
