@@ -202,7 +202,7 @@ export function StrategyExchangeLanding() {
             number="01"
             icon={<Sparkles size={19} />}
             title="Build and test"
-            text="Describe a method, choose its markets, and run a real historical simulation in the Strategy Studio."
+            text="Describe a method, choose its markets, and run a deterministic fixture-candle simulation in the Strategy Studio."
           />
           <Step
             number="02"
