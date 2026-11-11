@@ -71,6 +71,14 @@ class SupabaseRepository:
                 return rows[0]
         return None
 
+    def get_wallet_identity(self, user_id: str, chain: str = "near") -> dict[str, Any] | None:
+        rows = self._request(
+            "GET",
+            "wallet_identities",
+            params={"user_id": f"eq.{user_id}", "chain": f"eq.{chain}", "select": "*", "order": "created_at.desc", "limit": "1"},
+        )
+        return rows[0] if rows else None
+
     def list_strategies(self, published_only: bool = True, creator_id: str | None = None) -> list[dict[str, Any]]:
         params = {"select": "*", "order": "created_at.desc"}
         if published_only:

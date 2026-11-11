@@ -173,6 +173,7 @@ type StrategyProposal = {
   risk_constraints: string[];
   unsupported_assumptions: string[];
   rationale: string;
+  simple_explanation?: string;
 };
 
 type StrategyAnalysis = {
@@ -182,6 +183,13 @@ type StrategyAnalysis = {
   suggestions: string[];
   action: "accept" | "reject" | "no_action";
   rationale: string;
+};
+
+type PreparedPublication = {
+  version_id: string;
+  commitment: string;
+  creator_near_account: string;
+  network: "near:testnet";
 };
 
 export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?: string }) {
@@ -681,6 +689,9 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
   const studioDraft = typeof window === "undefined" ? {} : (() => {
     try { return JSON.parse(window.sessionStorage.getItem("quorumark.studio.draft") ?? "{}"); } catch { return {}; }
   })();
+  const publicationDraft = typeof window === "undefined" ? {} : (() => {
+    try { return JSON.parse(window.sessionStorage.getItem("quorumark.studio.publication") ?? "{}"); } catch { return {}; }
+  })();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [name, setName] = useState(studioDraft.name ?? "");
   const [prompt, setPrompt] = useState(studioDraft.prompt ?? "");
@@ -694,16 +705,20 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
   const [backtestId, setBacktestId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [savedStrategyId, setSavedStrategyId] = useState<string | null>(null);
-  const [savedVersionId, setSavedVersionId] = useState<string | null>(null);
-  const [savedVersion, setSavedVersion] = useState("v1.0");
-  const [published, setPublished] = useState(false);
+  const [savedStrategyId, setSavedStrategyId] = useState<string | null>(publicationDraft.strategyId ?? null);
+  const [savedVersionId, setSavedVersionId] = useState<string | null>(publicationDraft.versionId ?? null);
+  const [savedVersion, setSavedVersion] = useState(publicationDraft.version ?? "v1.0");
+  const [published, setPublished] = useState(Boolean(publicationDraft.published));
   const [anchoring, setAnchoring] = useState(false);
   const [publicationEvidence, setPublicationEvidence] = useState<{ status: string; transaction_hash?: string } | null>(null);
+  const [preparedPublication, setPreparedPublication] = useState<PreparedPublication | null>(null);
   const [publishing, setPublishing] = useState(false);
   useEffect(() => {
     window.sessionStorage.setItem("quorumark.studio.draft", JSON.stringify({ name, prompt, market, cadence, dataSource }));
   }, [name, prompt, market, cadence, dataSource]);
+  useEffect(() => {
+    window.sessionStorage.setItem("quorumark.studio.publication", JSON.stringify({ strategyId: savedStrategyId, versionId: savedVersionId, version: savedVersion, published }));
+  }, [savedStrategyId, savedVersionId, savedVersion, published]);
   async function generateProposal(instruction = prompt) {
     const wallet = getWalletSession();
     if (!wallet) {
@@ -876,7 +891,7 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
       setPublishing(false);
     }
   }
-  async function anchorPublishedVersion() {
+  async function preparePublishedVersion() {
     if (!savedStrategyId || !savedVersionId) {
       setError("Publish this version before anchoring its evidence.");
       return;
@@ -888,23 +903,32 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
         `/v1/strategies/${savedStrategyId}/publication-evidence`,
         { method: "POST", body: JSON.stringify({ version: savedVersion }) },
       );
+      setPreparedPublication(prepared);
+      toast.success("Verification details are ready for your review");
+    } catch (anchorError) {
+      setError(anchorError instanceof Error ? anchorError.message : "NEAR testnet evidence could not be confirmed");
+    } finally {
+      setAnchoring(false);
+    }
+  }
+  async function approvePreparedPublication() {
+    if (!savedStrategyId || !preparedPublication) return;
+    setAnchoring(true);
+    setError(null);
+    try {
       const { ensureBrowserPolyfills } = await import("@/lib/browser-polyfills");
       await ensureBrowserPolyfills();
       const { anchorPublication } = await import("@/lib/near-publication-evidence");
-      const submitted = await anchorPublication({
-        strategy_id: savedStrategyId,
-        version_id: prepared.version_id,
-        creator_near_account: prepared.creator_near_account,
-        network: prepared.network,
-      }, prepared.commitment);
+      const submitted = await anchorPublication({ strategy_id: savedStrategyId, version_id: preparedPublication.version_id, creator_near_account: preparedPublication.creator_near_account, network: preparedPublication.network }, preparedPublication.commitment);
       const confirmed = await quorumarkApi<{ status: string; transaction_hash?: string }>(
-        `/v1/strategies/${savedStrategyId}/publication-evidence/${prepared.version_id}/confirm`,
+        `/v1/strategies/${savedStrategyId}/publication-evidence/${preparedPublication.version_id}/confirm`,
         { method: "POST", body: JSON.stringify({ transaction_hash: submitted.transaction_hash }) },
       );
       setPublicationEvidence(confirmed);
-      toast.success("NEAR testnet publication evidence confirmed");
+      setPreparedPublication(null);
+      toast.success("NEAR testnet verification confirmed");
     } catch (anchorError) {
-      setError(anchorError instanceof Error ? anchorError.message : "NEAR testnet evidence could not be confirmed");
+      setError(anchorError instanceof Error ? anchorError.message : "NEAR testnet verification could not be completed");
     } finally {
       setAnchoring(false);
     }
@@ -995,16 +1019,21 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
               <ShieldCheck size={16} />
               <div>
                 <strong>{proposal.name}</strong>
-                <p>{proposal.thesis}</p>
-                <p><b>When it might act:</b> {proposal.entry_conditions.join(" ")}</p>
-                <p><b>When it would wait:</b> {proposal.exit_conditions.join(" ")}</p>
-                <p><b>How it limits risk:</b> {proposal.risk_constraints.join(" ") || proposal.stop_loss}</p>
+                <p>{proposal.simple_explanation || proposal.description}</p>
+                <p><b>What it watches:</b> {proposal.instruments.join(", ")} over {proposal.timeframe}.</p>
+                <p><b>How it limits risk:</b> {proposal.risk_constraints.join(" ") || "It follows the limits in the approved strategy."}</p>
                 <div className="q-ai-proposal-actions">
                   <button type="button" className="q-secondary" disabled={aiBusy} onClick={() => generateProposal("Make this strategy more cautious and explain the changes simply.")}>Make it more cautious</button>
                   <button type="button" className="q-secondary" disabled={aiBusy} onClick={() => generateProposal("Explain this strategy in simpler language for a beginner.")}>Explain it simply</button>
                   <button type="button" className="q-secondary" disabled={aiBusy} onClick={() => generateProposal("Improve this strategy while preserving its paper-only risk limits.")}>Improve the strategy</button>
                 </div>
-                <small>{proposal.timeframe} · {proposal.indicators.map((item) => item.name).join(", ") || "No indicators specified"}</small>
+                <details>
+                  <summary>Advanced details</summary>
+                  <small>{proposal.timeframe} · {proposal.indicators.map((item) => item.name).join(", ") || "No indicators specified"}</small>
+                  <p><b>Entry rules:</b> {proposal.entry_conditions.join(" ")}</p>
+                  <p><b>Exit rules:</b> {proposal.exit_conditions.join(" ")}</p>
+                  <p><b>Loss limit:</b> {proposal.stop_loss}</p>
+                </details>
               </div>
             </div>
           )}
@@ -1033,16 +1062,16 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
               <Chart values={metrics.equity} label="Backtest equity curve" />
               <div className="q-metric-grid">
                 <Metric
-                  label="Return"
+                  label="Practice return"
                   value={`${metrics.returnPct >= 0 ? "+" : ""}${metrics.returnPct}%`}
                   tone="positive"
                 />
-                <Metric label="Drawdown" value={`${metrics.drawdownPct}%`} />
-                <Metric label="Trades" value={String(metrics.trades)} />
-                <Metric label="Costs" value={`$${fmt(metrics.costs)}`} />
+                <Metric label="Biggest decline" value={`${fmt(metrics.drawdownPct)}%`} />
+                <Metric label="Practice trades" value={String(metrics.trades)} />
+                <Metric label="Estimated costs" value={`$${fmt(metrics.costs)}`} />
               </div>
               <div className="q-notice">
-                <ShieldCheck size={16} /> Calculated by the paper engine · {dataSourceLabel}
+                <ShieldCheck size={16} /> {metrics.returnPct < 0 ? `This practice test lost ${fmt(Math.abs(metrics.returnPct))}% of its starting value.` : `This practice test gained ${fmt(metrics.returnPct)}%.`} Sample data is not a prediction of future results. · {dataSourceLabel}
               </div>
               <button className="q-secondary q-analysis-button" onClick={analyzeResults} disabled={aiBusy}>
                 {aiBusy ? "Preparing an explanation…" : analysis ? "Refresh explanation" : "Explain these results"}
@@ -1051,9 +1080,10 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
                 <div className="q-notice q-ai-analysis">
                   <ShieldCheck size={16} />
                   <div>
-                    <strong>What the strategy agent sees</strong>
+                    <strong>What this means in simple terms</strong>
                     <p>{analysis.rationale}</p>
                     {analysis.risks.length > 0 && <small>Watch for: {analysis.risks.join(" · ")}</small>}
+                    <details><summary>Advanced analysis</summary><p>{analysis.calculated_metrics.join(" · ")}</p><p>{analysis.suggestions.join(" · ")}</p></details>
                   </div>
                 </div>
               )}
@@ -1068,10 +1098,24 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
               {published && !publicationEvidence && (
                 <div className="q-notice">
                   <ShieldCheck size={16} />
-                  <span>Hosted publication is complete. You can optionally anchor this version on NEAR testnet.</span>
-                  <button className="q-secondary" onClick={anchorPublishedVersion} disabled={anchoring}>
-                    {anchoring ? "Waiting for wallet…" : "Anchor on NEAR testnet"}
+                  <span>Hosted publication is complete. Review the details before recording this version on NEAR testnet.</span>
+                  <button className="q-secondary" onClick={preparePublishedVersion} disabled={anchoring}>
+                    {anchoring ? "Preparing verification..." : "Prepare strategy verification"}
                   </button>
+                </div>
+              )}
+              {preparedPublication && !publicationEvidence && (
+                <div className="q-notice q-ai-proposal">
+                  <ShieldCheck size={16} />
+                  <div>
+                    <strong>Review before opening your wallet</strong>
+                    <p>Network: NEAR testnet · Receiver: quorumark-evidence.testnet</p>
+                    <p>Method: record_publication · Deposit: 0 NEAR · Expected fee: up to 0.00003 NEAR in gas</p>
+                    <p>Commitment: <code>{preparedPublication.commitment}</code></p>
+                    <p>Strategy ID: <code>{savedStrategyId}</code> · Version ID: <code>{preparedPublication.version_id}</code></p>
+                    <small>This records the exact published version commitment. It does not prove profitability or market-data accuracy.</small>
+                    <button className="q-primary" onClick={approvePreparedPublication} disabled={anchoring}>{anchoring ? "Waiting for wallet..." : "Approve in Meteor Wallet"}</button>
+                  </div>
                 </div>
               )}
               {publicationEvidence?.transaction_hash && (

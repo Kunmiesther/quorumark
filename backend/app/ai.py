@@ -47,6 +47,7 @@ class StrategyProposal(BaseModel):
     risk_constraints: list[str] = Field(min_length=1, max_length=20)
     unsupported_assumptions: list[str] = Field(max_length=20)
     rationale: str = Field(min_length=10, max_length=2_000)
+    simple_explanation: str = Field(default="", max_length=2_000)
 
 
 class AIAnalysis(BaseModel):
@@ -76,7 +77,7 @@ PROPOSAL_SCHEMA: dict[str, Any] = {
     "required": [
         "name", "description", "thesis", "instruments", "timeframe", "indicators",
         "entry_conditions", "exit_conditions", "stop_loss", "take_profit",
-        "position_sizing", "risk_constraints", "unsupported_assumptions", "rationale",
+        "position_sizing", "risk_constraints", "unsupported_assumptions", "rationale", "simple_explanation",
     ],
     "properties": {
         "name": {"type": "string", "minLength": 2, "maxLength": 120},
@@ -93,6 +94,7 @@ PROPOSAL_SCHEMA: dict[str, Any] = {
         "risk_constraints": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string"}},
         "unsupported_assumptions": {"type": "array", "maxItems": 20, "items": {"type": "string"}},
         "rationale": {"type": "string", "minLength": 10, "maxLength": 2000},
+        "simple_explanation": {"type": "string", "minLength": 10, "maxLength": 2000},
     },
 }
 
@@ -266,7 +268,7 @@ def generate_strategy_proposal(prompt: str, current_proposal: StrategyProposal |
     if not prompt.strip() or len(prompt.strip()) > 4_000:
         raise ValueError("Strategy request must contain between 1 and 4,000 characters")
     context = f"\nCurrent proposal to refine:\n{current_proposal.model_dump_json()}" if current_proposal else ""
-    instruction = f"Create or refine a strategy proposal from this creator request. Keep assumptions explicit and do not generate executable code. Creator request: {prompt.strip()}{context}"
+    instruction = f"Create or refine a strategy proposal from this creator request. Keep assumptions explicit and do not generate executable code. Write simple_explanation in short everyday language for a beginner: say what the strategy watches, when it might make a practice trade, when it waits, how it tries to limit losses, and what could go wrong. Do not use indicator acronyms or exact numeric thresholds in simple_explanation; keep those in the advanced rule fields. Creator request: {prompt.strip()}{context}"
     raw, metadata = _request("strategy_proposal", PROPOSAL_SCHEMA, instruction)
     try:
         return StrategyProposal.model_validate(raw), metadata
@@ -278,7 +280,7 @@ def analyze_strategy(strategy: dict[str, Any], metrics: dict[str, Any], question
     if len(question.strip()) > 2_000:
         raise ValueError("Analysis question must be at most 2,000 characters")
     instruction = json.dumps({"question": question.strip() or "Explain the main risks and observations.", "strategy": strategy, "calculated_metrics": metrics}, sort_keys=True)
-    raw, metadata = _request("strategy_analysis", ANALYSIS_SCHEMA, f"Analyze this approved strategy using only the supplied calculated metrics and strategy context. Do not invent market observations. Input: {instruction}")
+    raw, metadata = _request("strategy_analysis", ANALYSIS_SCHEMA, f"Analyze this approved strategy using only the supplied calculated metrics and strategy context. Do not invent market observations. Write the rationale in short everyday language for a beginner. Say what the strategy watches, when it might act, when it waits, how it tries to limit losses, and what could go wrong. Do not mention indicator acronyms or exact thresholds in the rationale; keep technical detail in calculated_metrics and suggestions. Input: {instruction}")
     try:
         return AIAnalysis.model_validate(raw), metadata
     except ValidationError as error:

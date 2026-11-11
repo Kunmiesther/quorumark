@@ -157,3 +157,32 @@ def test_local_marketplace_creator_lifecycle_is_owner_scoped(tmp_path: Path, mon
     assert client.get("/v1/strategies").json()[0]["id"] == strategy_id
     assert client.post("/v1/subscriptions", headers={"x-quorumark-identity": "near:follower.testnet"}, json={"strategy_id": strategy_id, "environment": "sandbox"}).status_code == 201
     assert client.post(f"/v1/strategies/{strategy_id}/publish", headers={"x-quorumark-identity": "near:other.testnet"}).status_code == 404
+
+
+def test_publication_evidence_resolves_hosted_wallet_identity(tmp_path: Path, monkeypatch):
+    repository = PaperRepository(str(tmp_path / "publication.db"))
+    monkeypatch.setattr(main, "repository", repository)
+    user_id = "9b7d8c2e-9d66-4ab0-9d0f-7d6f4d1b6d2a"
+    monkeypatch.setattr(main, "resolve_near_account", lambda identity: "estarkunmi.testnet" if identity == user_id else None)
+    client = TestClient(app)
+    headers = {"x-quorumark-identity": user_id}
+    created = client.post("/v1/strategies", headers=headers, json={
+        "name": "Verified Bitcoin Practice",
+        "thesis": "A hosted publication test strategy with safe paper-only rules.",
+        "market": "Crypto spot",
+        "supported_assets": ["BTCUSDT"],
+        "risk_class": "low",
+        "definition": {"type": "reference_crossover"},
+    })
+    assert created.status_code == 201
+    strategy_id = created.json()["id"]
+    version = client.post(f"/v1/strategies/{strategy_id}/versions", headers=headers, json={
+        "version": "v1.0",
+        "definition": {"type": "reference_crossover"},
+        "backtest_metrics": {"trade_count": 1},
+    })
+    assert version.status_code == 201
+    assert client.post(f"/v1/strategies/{strategy_id}/publish", headers=headers).status_code == 200
+    prepared = client.post(f"/v1/strategies/{strategy_id}/publication-evidence", headers=headers, json={"version": "v1.0"})
+    assert prepared.status_code == 201
+    assert prepared.json()["creator_near_account"] == "estarkunmi.testnet"

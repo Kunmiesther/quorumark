@@ -45,6 +45,25 @@ else:
     repository = SupabaseRepository()
 
 
+def resolve_near_account(identity: str) -> str | None:
+    """Resolve the wallet account behind a verified application identity.
+
+    Hosted sessions use the Supabase auth user UUID as their subject. Local
+    development sessions may still use the legacy near:account test identity.
+    """
+    legacy_account = identity.removeprefix("near:")
+    if legacy_account.endswith(".testnet") or legacy_account == "testnet":
+        return legacy_account
+    resolver = getattr(repository, "get_wallet_identity", None)
+    if not callable(resolver):
+        return None
+    wallet = resolver(identity, "near")
+    account = wallet.get("public_address") if isinstance(wallet, dict) else None
+    if isinstance(account, str) and (account.endswith(".testnet") or account == "testnet"):
+        return account
+    return None
+
+
 @app.get("/health")
 def health() -> dict[str, str | bool]:
     return {"service": "quorumark-python-engine", "status": "ok", "paper_only": True}
@@ -162,8 +181,8 @@ def prepare_publication_evidence(strategy_id: str, request: PublicationPrepareRe
     version = next((item for item in repository.list_versions(strategy_id) if item.get("version") == request.version), None)
     if not version or not version.get("id"):
         raise HTTPException(status_code=404, detail="Strategy version not found")
-    account = identity.removeprefix("near:")
-    if not account.endswith(".testnet") and account != "testnet":
+    account = resolve_near_account(identity)
+    if not account:
         raise HTTPException(status_code=400, detail="A verified NEAR testnet creator session is required")
     record = {
         "id": str(version["id"]), "strategy_id": strategy_id, "version_id": str(version["id"]),
@@ -184,7 +203,8 @@ def prepare_publication_evidence(strategy_id: str, request: PublicationPrepareRe
 def confirm_publication_evidence(strategy_id: str, version_id: str, request: PublicationConfirmRequest, identity: str = Depends(require_local_identity)) -> dict[str, object]:
     evidence = repository.get_publication_evidence(version_id)
     contract_id = os.getenv("QUORUMARK_NEAR_EVIDENCE_CONTRACT_ID", "").strip()
-    if not evidence or evidence.get("strategy_id") != strategy_id or evidence.get("creator_near_account") != identity.removeprefix("near:"):
+    account = resolve_near_account(identity)
+    if not evidence or evidence.get("strategy_id") != strategy_id or not account or evidence.get("creator_near_account") != account:
         raise HTTPException(status_code=404, detail="Publication evidence request not found")
     if not contract_id or evidence.get("network") != "near:testnet":
         raise HTTPException(status_code=503, detail="NEAR testnet evidence contract is not configured")
