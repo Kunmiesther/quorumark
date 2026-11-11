@@ -71,11 +71,11 @@ def test_gemini_provider_parses_structured_output_without_exposing_key(monkeypat
 
     monkeypatch.setenv("AI_PROVIDER", "gemini")
     monkeypatch.setenv("AI_API_KEY", "server-only-test-key")
-    monkeypatch.setenv("AI_MODEL", "gemini-2.5-flash-lite")
+    monkeypatch.setenv("AI_MODEL", "gemini-3.5-flash-lite")
     monkeypatch.setattr(ai.httpx, "post", lambda *args, **kwargs: FakeResponse())
     result, provenance = ai.generate_strategy_proposal("Build a conservative BTC trend strategy.")
     assert result.name == "BTC Trend"
-    assert provenance == {"provider": "gemini", "model": "gemini-2.5-flash-lite"}
+    assert provenance == {"provider": "gemini", "model": "gemini-3.5-flash-lite"}
 
 
 def test_historical_data_rejects_invalid_symbols_without_provider_call():

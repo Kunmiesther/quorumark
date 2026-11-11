@@ -47,7 +47,7 @@ they never substitute deterministic text while claiming a model was called.
 For the zero-cost Gemini path, create a key in the official Google AI Studio
 (`https://aistudio.google.com/apikey`), without linking a paid billing project,
 then set `AI_PROVIDER=gemini`, `AI_API_KEY` server-side, and
-`AI_MODEL=gemini-2.5-flash-lite`. Free-tier model access and quotas are
+`AI_MODEL=gemini-3.5-flash-lite`. Free-tier model access and quotas are
 account/region dependent; the API returns an unavailable error when the key,
 quota, or selected model is not eligible. Do not paste the key into the
 browser or commit it.
