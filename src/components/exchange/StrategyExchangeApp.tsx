@@ -201,7 +201,7 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
   useEffect(() => {
     const syncWallet = () => {
       const session = getWalletSession();
-      setState((current) => ({ ...current, wallet: session?.address ?? null }));
+      setState((current) => ({ ...current, wallet: session?.address ?? undefined }));
     };
     syncWallet();
     window.addEventListener("quorumark-wallet-session", syncWallet);
@@ -682,6 +682,8 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [name, setName] = useState("");
   const [prompt, setPrompt] = useState("");
+  const [market, setMarket] = useState("BTCUSDT");
+  const [cadence, setCadence] = useState("4h");
   const [proposal, setProposal] = useState<StrategyProposal | null>(null);
   const [analysis, setAnalysis] = useState<StrategyAnalysis | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
@@ -692,17 +694,18 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
   const [error, setError] = useState<string | null>(null);
   const [savedStrategyId, setSavedStrategyId] = useState<string | null>(null);
   const [savedVersionId, setSavedVersionId] = useState<string | null>(null);
+  const [savedVersion, setSavedVersion] = useState("v1.0");
   const [published, setPublished] = useState(false);
   const [anchoring, setAnchoring] = useState(false);
   const [publicationEvidence, setPublicationEvidence] = useState<{ status: string; transaction_hash?: string } | null>(null);
   const [publishing, setPublishing] = useState(false);
-  async function generateProposal() {
+  async function generateProposal(instruction = prompt) {
     const wallet = getWalletSession();
     if (!wallet) {
       setError("Authenticate a NEAR wallet before asking the strategy agent for a proposal.");
       return;
     }
-    if (!prompt.trim()) {
+    if (!instruction.trim()) {
       setError("Describe the strategy you want the agent to shape.");
       return;
     }
@@ -711,7 +714,10 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
     try {
       const result = await quorumarkApi<{ proposal: StrategyProposal }>("/v1/ai/strategy-proposals", {
         method: "POST",
-        body: JSON.stringify({ prompt, current_proposal: proposal }),
+        body: JSON.stringify({
+          prompt: `${instruction.trim()}\nUse the selected market ${market} and keep the explanation beginner-friendly.`,
+          current_proposal: proposal,
+        }),
       });
       setProposal(result.proposal);
       setName(result.proposal.name);
@@ -734,30 +740,35 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
       let source = "quorumark_fixture";
       if (dataSource === "historical") {
         const historical = await quorumarkApi<{ candles: typeof candles; provenance: { source: string } }>(
-          "/v1/market-data/historical?symbol=BTCUSDT&interval=1h&limit=200",
+          `/v1/market-data/historical?symbol=${encodeURIComponent(market)}&interval=${encodeURIComponent(cadence)}&limit=200`,
         );
         candles = historical.candles;
         source = historical.provenance.source;
       }
       setDataSourceLabel(source);
-      const response = await fetch(
-        `${PUBLIC_PYTHON_BACKEND_URL.replace(/\/$/, "")}/v1/backtests/reference`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            candles,
-            source,
-            strategy: {
-              fast_window: 3,
-              slow_window: 8,
-              initial_cash: 10_000,
-              allocation_pct: 25,
-              fee_bps: 10,
-            },
-          }),
-        },
-      );
+      let response: Response;
+      try {
+        response = await fetch(
+          `${PUBLIC_PYTHON_BACKEND_URL.replace(/\/$/, "")}/v1/backtests/reference`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              candles,
+              source,
+              strategy: {
+                fast_window: 3,
+                slow_window: 8,
+                initial_cash: 10_000,
+                allocation_pct: 25,
+                fee_bps: 10,
+              },
+            }),
+          },
+        );
+      } catch {
+        throw new Error("We couldn't reach the testing service. Check that the local service is running, then try again.");
+      }
       if (!response.ok) throw new Error(`Strategy testing returned HTTP ${response.status}`);
       const result = await response.json();
       setBacktestId(result.backtest_id ?? null);
@@ -811,14 +822,11 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
       setError("Authenticate a wallet before saving a strategy draft.");
       return;
     }
-    if (!name.trim()) {
-      setError("Give your strategy a name before saving it.");
-      return;
-    }
     if (!metrics) {
       setError("Test the strategy first so its version has real performance evidence.");
       return;
     }
+    const strategyName = name.trim() || proposal?.name || "Practice strategy";
     setPublishing(true);
     setError(null);
     try {
@@ -827,27 +835,29 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
         : await quorumarkApi<{ id: string }>("/v1/strategies", {
             method: "POST",
             body: JSON.stringify({
-              name,
+              name: strategyName,
               thesis: proposal?.thesis ?? "A creator-defined strategy tested against labeled market data.",
               market: "Crypto spot",
-              supported_assets: proposal?.instruments ?? ["BTC", "ETH"],
+              supported_assets: [market],
               risk_class: "medium",
-              cadence: "Every 4 hours",
+              cadence: cadence === "1h" ? "Every hour" : cadence === "1d" ? "Once a day" : "Every 4 hours",
               monthly_price: 0,
               definition: { type: "compiled_strategy_proposal", source: dataSourceLabel, proposal },
             }),
           });
       setSavedStrategyId(created.id);
-      const version = await quorumarkApi<{ id: string }>(`/v1/strategies/${created.id}/versions`, {
+      const nextVersion = savedVersion;
+      const version = await quorumarkApi<{ id: string; version?: string }>(`/v1/strategies/${created.id}/versions`, {
         method: "POST",
         body: JSON.stringify({
-          version: "v1.0",
+          version: nextVersion,
           definition: { type: "compiled_strategy_proposal", source: dataSourceLabel, proposal },
           backtest_id: backtestId,
           backtest_metrics: metrics,
         }),
       });
       setSavedVersionId(version.id);
+      setSavedVersion(version.version ?? nextVersion);
       if (publish) {
         await quorumarkApi(`/v1/strategies/${created.id}/publish`, { method: "POST" });
         setPublished(true);
@@ -871,7 +881,7 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
     try {
       const prepared = await quorumarkApi<{ version_id: string; commitment: string; creator_near_account: string; network: "near:testnet" }>(
         `/v1/strategies/${savedStrategyId}/publication-evidence`,
-        { method: "POST", body: JSON.stringify({ version: "v1.0" }) },
+        { method: "POST", body: JSON.stringify({ version: savedVersion }) },
       );
       const { ensureBrowserPolyfills } = await import("@/lib/browser-polyfills");
       await ensureBrowserPolyfills();
@@ -922,39 +932,54 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
             </div>
           </div>
           <label>
-            Strategy name
+            Strategy name (optional)
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="For example, Atlas range break"
+              placeholder="AI will suggest a name you can edit"
             />
           </label>
           <label>
-            Strategy description
+            What would you like your strategy to do?
             <textarea
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Build a BTC momentum strategy that follows the medium-term trend, avoids high-volatility conditions, and uses conservative position sizing."
+              placeholder="Create a strategy that watches Bitcoin, looks for opportunities when the price is rising, and avoids risky conditions."
             />
           </label>
+          <div className="q-example-ideas">
+            <span>Try an idea</span>
+            {["Follow Bitcoin's upward trends.", "Look for opportunities in Ethereum.", "Avoid trading when markets are unstable.", "Create a cautious strategy for practice trading."].map((idea) => (
+              <button key={idea} type="button" onClick={() => setPrompt(idea)}>{idea}</button>
+            ))}
+          </div>
           <div className="q-form-row">
             <label>
-              Markets
-              <input defaultValue="BTC, ETH" />
+              Market
+              <select value={market} onChange={(event) => setMarket(event.target.value)}>
+                <option value="BTCUSDT">Bitcoin (BTC)</option>
+                <option value="ETHUSDT">Ethereum (ETH)</option>
+                <option value="SOLUSDT">Solana (SOL)</option>
+                <option value="NEARUSDT">NEAR Protocol (NEAR)</option>
+              </select>
             </label>
             <label>
-              Review cadence
-              <input defaultValue="Every 4 hours" />
+              How often should it check the market?
+              <select value={cadence} onChange={(event) => setCadence(event.target.value)}>
+                <option value="1h">Every hour</option>
+                <option value="4h">Every 4 hours</option>
+                <option value="1d">Once a day</option>
+              </select>
             </label>
           </div>
           <div className="q-studio-agent-actions">
-            <button className="q-primary" disabled={aiBusy} onClick={generateProposal}>
-              {aiBusy ? "Thinking through the method…" : proposal ? "Refine with the strategy agent" : "Shape this with AI"} <ArrowRight size={16} />
+            <button className="q-primary" disabled={aiBusy} onClick={() => generateProposal()}>
+              {aiBusy ? "Building your strategy…" : proposal ? "Improve my strategy" : "Create my strategy"} <ArrowRight size={16} />
             </button>
-            <span>AI proposal only · review before it becomes a version</span>
+            <span>Review the AI suggestion before saving</span>
           </div>
           <label>
-            Backtest source
+            Market data for testing
             <select value={dataSource} onChange={(event) => setDataSource(event.target.value as "fixture" | "historical")}>
               <option value="fixture">Sample market data · repeatable test</option>
               <option value="historical">Public historical market data · BTCUSDT hourly</option>
@@ -966,12 +991,20 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
               <div>
                 <strong>{proposal.name}</strong>
                 <p>{proposal.thesis}</p>
+                <p><b>When it might act:</b> {proposal.entry_conditions.join(" ")}</p>
+                <p><b>When it would wait:</b> {proposal.exit_conditions.join(" ")}</p>
+                <p><b>How it limits risk:</b> {proposal.risk_constraints.join(" ") || proposal.stop_loss}</p>
+                <div className="q-ai-proposal-actions">
+                  <button type="button" className="q-secondary" disabled={aiBusy} onClick={() => generateProposal("Make this strategy more cautious and explain the changes simply.")}>Make it more cautious</button>
+                  <button type="button" className="q-secondary" disabled={aiBusy} onClick={() => generateProposal("Explain this strategy in simpler language for a beginner.")}>Explain it simply</button>
+                  <button type="button" className="q-secondary" disabled={aiBusy} onClick={() => generateProposal("Improve this strategy while preserving its paper-only risk limits.")}>Improve the strategy</button>
+                </div>
                 <small>{proposal.timeframe} · {proposal.indicators.map((item) => item.name).join(", ") || "No indicators specified"}</small>
               </div>
             </div>
           )}
           <button className="q-primary" disabled={busy} onClick={runBacktest}>
-            {busy ? "Running the deterministic engine…" : "Run backtest"} <Play size={16} />
+            {busy ? "Testing your strategy…" : "Test my strategy"} <Play size={16} />
           </button>
           {error && (
             <div className="q-notice q-notice-error">
@@ -983,7 +1016,7 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
           <div className="q-result-heading">
             <div>
               <p className="q-kicker">Your results</p>
-              <h2>{metrics ? "Simulation complete" : "The result will appear here"}</h2>
+              <h2>{metrics ? "Your strategy results" : "Your results will appear here"}</h2>
             </div>
             <span className="q-result-state">
               <i /> {metrics ? "Backtested" : "Waiting for a test"}

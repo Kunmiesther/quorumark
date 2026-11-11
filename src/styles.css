@@ -668,6 +668,45 @@ button {
 .q-ai-analysis p {
   margin: 4px 0 6px;
 }
+.q-example-ideas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: -4px 0 18px;
+}
+.q-example-ideas span {
+  width: 100%;
+  color: rgba(241, 240, 232, 0.48);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.q-example-ideas button {
+  padding: 7px 9px;
+  border: 1px solid rgba(241, 240, 232, 0.14);
+  border-radius: 8px;
+  background: rgba(241, 240, 232, 0.035);
+  color: rgba(241, 240, 232, 0.72);
+  text-align: left;
+  font-size: 12px;
+}
+
+.q-ai-proposal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.q-ai-proposal-actions .q-secondary {
+  font-size: 0.78rem;
+  padding: 8px 10px;
+}
+.q-example-ideas button:hover,
+.q-example-ideas button:focus-visible {
+  border-color: var(--q-cyan);
+  color: var(--q-cyan);
+}
 .q-landing-hero {
   width: min(1220px, calc(100% - 48px));
   min-height: 700px;

@@ -35,10 +35,15 @@ export async function quorumarkApi<T>(path: string, init: RequestInit = {}): Pro
   const headers = new Headers(init.headers);
   headers.set("content-type", "application/json");
   if (session?.token) headers.set("authorization", `Bearer ${session.token}`);
-  const response = await fetch(`${PUBLIC_PYTHON_BACKEND_URL.replace(/\/$/, "")}${path}`, {
-    ...init,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${PUBLIC_PYTHON_BACKEND_URL.replace(/\/$/, "")}${path}`, {
+      ...init,
+      headers,
+    });
+  } catch {
+    throw new Error("We couldn't reach the strategy service. Check that the local service is running, then try again.");
+  }
   const body = await response.json().catch(() => null);
   if (!response.ok)
     throw new Error(body?.detail ?? `Quorumark service returned HTTP ${response.status}`);

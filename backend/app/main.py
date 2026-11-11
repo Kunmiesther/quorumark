@@ -12,6 +12,7 @@ from .historical_data import HistoricalDataError, fetch_historical
 from .engine import run_reference_backtest
 from .models import AIAnalysisRequest, AIAnalysisResponse, AIProposalRequest, AIProposalResponse, AgentEvaluationRequest, AgentEvaluationResponse, BacktestRequest, BacktestResponse, HistoricalDataQuery, PaperExecutionRequest, PaperExecutionResponse
 from .paper import process_paper_signal
+from .contracts import evidence_hash
 from .repository import PaperRepository
 from .supabase_repository import SupabaseRepository
 from .security import require_verified_identity
@@ -34,7 +35,7 @@ app.add_middleware(
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=False,
     allow_methods=["GET", "POST"],
-    allow_headers=["content-type"],
+    allow_headers=["content-type", "authorization"],
 )
 if os.getenv("QUORUMARK_PYTHON_ENVIRONMENT", "local").lower() == "local":
     repository = PaperRepository()
@@ -121,7 +122,13 @@ def create_version(strategy_id: str, request: StrategyVersionRequest, identity: 
     strategy = repository.get_strategy(strategy_id)
     if not strategy or strategy["creator_id"] != identity:
         raise HTTPException(status_code=404, detail="Strategy not found")
-    version = repository.save_strategy_version(strategy["id"], request.version, request.definition, request.backtest_id, request.backtest_metrics, request.evidence_hash, datetime.now(timezone.utc).isoformat())
+    existing = next((item for item in repository.list_versions(strategy["id"]) if item.get("version") == request.version), None)
+    requested_hash = request.evidence_hash or evidence_hash(request.definition)
+    if existing:
+        if requested_hash and existing.get("content_hash") != requested_hash:
+            raise HTTPException(status_code=409, detail="That version is immutable. Create a new version for these changes.")
+        return existing
+    version = repository.save_strategy_version(strategy["id"], request.version, request.definition, request.backtest_id, request.backtest_metrics, requested_hash, datetime.now(timezone.utc).isoformat())
     updated = repository.update_strategy(strategy["id"], identity, current_version=request.version)
     return {**version, "strategy": updated or strategy}
 

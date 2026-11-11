@@ -9,7 +9,6 @@ from typing import Any
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from .contracts import evidence_hash
 from .repository import PaperRepository
 from .security import require_verified_identity
 
@@ -89,15 +88,6 @@ def create_strategy(repository: PaperRepository, creator_id: str, request: Strat
         "published_at": None,
     }
     repository.save_strategy(strategy)
-    repository.save_strategy_version(
-        strategy_id,
-        "v1.0",
-        request.definition,
-        None,
-        None,
-        evidence_hash(request.definition),
-        utc_now(),
-    )
     return strategy
 
 

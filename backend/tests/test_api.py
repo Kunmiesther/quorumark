@@ -13,6 +13,19 @@ def test_health_is_paper_only():
     assert response.json()["paper_only"] is True
 
 
+def test_browser_auth_preflight_allows_authorization_header():
+    response = TestClient(app).options(
+        "/v1/ai/strategy-proposals",
+        headers={
+            "Origin": "http://127.0.0.1:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        },
+    )
+    assert response.status_code == 200
+    assert "authorization" in response.headers.get("access-control-allow-headers", "").lower()
+
+
 def test_backtest_api_validates_and_returns_metrics():
     candles = [{"timestamp": f"2026-01-01T{i:02d}:00:00Z", "open": 10 + i, "high": 11 + i, "low": 9 + i, "close": 10 + i} for i in range(12)]
     response = TestClient(app).post("/v1/backtests/reference", json={"candles": candles})
@@ -98,6 +111,11 @@ def test_local_marketplace_creator_lifecycle_is_owner_scoped(tmp_path: Path, mon
     })
     assert created.status_code == 201
     strategy_id = created.json()["id"]
+    assert client.post(f"/v1/strategies/{strategy_id}/versions", headers=headers, json={
+        "version": "v1.0",
+        "definition": {"type": "reference_crossover"},
+        "backtest_metrics": {"trade_count": 0},
+    }).status_code == 201
     assert client.post(f"/v1/strategies/{strategy_id}/publish", headers=headers).status_code == 200
     assert client.get("/v1/strategies").json()[0]["id"] == strategy_id
     assert client.post("/v1/subscriptions", headers={"x-quorumark-identity": "near:follower.testnet"}, json={"strategy_id": strategy_id, "environment": "sandbox"}).status_code == 201

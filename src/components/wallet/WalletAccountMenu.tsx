@@ -1,4 +1,4 @@
-import { Check, Copy, LogOut, WalletCards, X } from "lucide-react";
+import { Check, WalletCards, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -78,8 +78,8 @@ export function WalletAccountMenu({ className = "" }: { className?: string }) {
         <div className="q-wallet-menu-head"><span>Connected wallet</span><button className="q-icon-button" onClick={() => setOpen(false)} aria-label="Close wallet menu"><X size={15} /></button></div>
         <strong className="q-wallet-full-address">{session.address}</strong>
         <span className="q-wallet-session-status"><i /> Verified session · {session.chain}</span>
-        <button className="q-wallet-menu-action" onClick={copyAddress} role="menuitem">{copied ? <Check size={15} /> : <Copy size={15} />} {copied ? "Copied" : "Copy wallet address"}</button>
-        <button className="q-wallet-menu-action q-wallet-signout" onClick={disconnect} role="menuitem"><LogOut size={15} /> Disconnect</button>
+        <button className="q-wallet-menu-action" onClick={copyAddress} role="menuitem"><Check size={15} /> {copied ? "Copied" : "Copy wallet address"}</button>
+        <button className="q-wallet-menu-action q-wallet-signout" onClick={disconnect} role="menuitem"><WalletCards size={15} /> Disconnect</button>
       </div>}
     </div>
   );
