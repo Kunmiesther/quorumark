@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 import time
@@ -9,6 +10,8 @@ from typing import Any, Literal
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+logger = logging.getLogger(__name__)
 
 
 class AIUnavailableError(RuntimeError):
@@ -215,16 +218,41 @@ def _request(schema_name: str, schema: dict[str, Any], instruction: str) -> tupl
         }
         url = api_url
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    try:
-        response = httpx.post(url, headers=headers, json=body, timeout=timeout)
-    except httpx.HTTPError as error:
-        raise AIUnavailableError("AI provider request failed") from error
+    response = None
+    for attempt in range(3):
+        try:
+            response = httpx.post(url, headers=headers, json=body, timeout=timeout)
+        except httpx.HTTPError as error:
+            logger.warning("AI provider network failure provider=%s model=%s error_type=%s", provider, model, type(error).__name__)
+            raise AIUnavailableError("AI provider could not be reached. Try again shortly.") from error
+        if response.status_code < 500 or attempt == 2:
+            break
+        time.sleep(0.5 * (attempt + 1))
+    assert response is not None
     if response.status_code in {401, 403}:
-        raise AIUnavailableError("AI provider credentials were rejected")
+        logger.warning("AI provider credentials rejected provider=%s model=%s status=%s", provider, model, response.status_code)
+        raise AIUnavailableError("The AI assistant is not authorized. Check the server-side provider key.")
     if response.status_code == 429:
-        raise AIUnavailableError("AI provider rate limit reached")
+        logger.warning("AI provider rate limited provider=%s model=%s", provider, model)
+        raise AIUnavailableError("The AI assistant is busy right now. Please wait a moment and try again.")
+    if response.status_code in {400, 404}:
+        try:
+            error_payload = response.json().get("error", {})
+            provider_status = str(error_payload.get("status", "")).upper()
+            provider_message = str(error_payload.get("message", "")).lower()
+        except (ValueError, TypeError, AttributeError):
+            provider_status, provider_message = "", ""
+        if response.status_code == 404 or provider_status == "NOT_FOUND" or "model" in provider_message:
+            logger.warning("AI provider model unavailable provider=%s model=%s status=%s provider_status=%s", provider, model, response.status_code, provider_status or "unknown")
+            raise AIUnavailableError("The configured AI model is unavailable. Choose a supported free model in the server configuration.")
+        logger.warning("AI provider rejected request provider=%s model=%s status=%s provider_status=%s", provider, model, response.status_code, provider_status or "unknown")
+        raise AIProviderError("The AI assistant rejected this request. Try again or simplify the strategy idea.")
+    if response.status_code >= 500:
+        logger.warning("AI provider service failure provider=%s model=%s status=%s", provider, model, response.status_code)
+        raise AIUnavailableError("The AI assistant is temporarily unavailable. Please try again shortly.")
     if not response.is_success:
-        raise AIProviderError(f"AI provider returned HTTP {response.status_code}")
+        logger.warning("AI provider unexpected response provider=%s model=%s status=%s", provider, model, response.status_code)
+        raise AIProviderError("The AI assistant returned an unexpected response. Please try again.")
     try:
         payload = response.json()
         text = _gemini_output_text(payload) if provider == "gemini" else _output_text(payload)

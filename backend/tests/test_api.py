@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import pytest
 from pathlib import Path
 
 from app.main import app
@@ -89,6 +90,42 @@ def test_gemini_provider_parses_structured_output_without_exposing_key(monkeypat
     result, provenance = ai.generate_strategy_proposal("Build a conservative BTC trend strategy.")
     assert result.name == "BTC Trend"
     assert provenance == {"provider": "gemini", "model": "gemini-3.5-flash-lite"}
+
+
+@pytest.mark.parametrize(
+    ("status_code", "payload", "message"),
+    [
+        (401, {"error": {"status": "UNAUTHENTICATED"}}, "not authorized"),
+        (429, {"error": {"status": "RESOURCE_EXHAUSTED"}}, "busy"),
+        (404, {"error": {"status": "NOT_FOUND", "message": "model not found"}}, "model is unavailable"),
+        (503, {"error": {"status": "UNAVAILABLE"}}, "temporarily unavailable"),
+    ],
+)
+def test_gemini_provider_maps_provider_failures_without_leaking_response_body(monkeypatch, status_code, payload, message):
+    class FakeResponse:
+        is_success = False
+
+        def __init__(self):
+            self.status_code = status_code
+
+        def json(self):
+            return payload
+
+    monkeypatch.setenv("AI_PROVIDER", "gemini")
+    monkeypatch.setenv("AI_API_KEY", "server-only-test-key")
+    monkeypatch.setenv("AI_MODEL", "gemini-3.5-flash-lite")
+    monkeypatch.setattr(ai.httpx, "post", lambda *args, **kwargs: FakeResponse())
+    with pytest.raises(ai.AIUnavailableError, match=message):
+        ai._request("test", {"type": "object"}, "test")
+
+
+def test_gemini_provider_maps_network_failure(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "gemini")
+    monkeypatch.setenv("AI_API_KEY", "server-only-test-key")
+    monkeypatch.setenv("AI_MODEL", "gemini-3.5-flash-lite")
+    monkeypatch.setattr(ai.httpx, "post", lambda *args, **kwargs: (_ for _ in ()).throw(ai.httpx.ConnectError("offline")))
+    with pytest.raises(ai.AIUnavailableError, match="could not be reached"):
+        ai._request("test", {"type": "object"}, "test")
 
 
 def test_historical_data_rejects_invalid_symbols_without_provider_call():

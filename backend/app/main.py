@@ -2,6 +2,7 @@ import os
 import base64
 import httpx
 import json
+import logging
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -30,6 +31,7 @@ from .marketplace import (
 )
 
 app = FastAPI(title="Quorumark Strategy Engine", version="0.1.0")
+logger = logging.getLogger(__name__)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -92,7 +94,11 @@ def strategy_proposal(request: AIProposalRequest, identity: str = Depends(requir
     except (AIUnavailableError, AIProviderError, ValueError) as error:
         status = 503 if isinstance(error, AIUnavailableError) else 422
         raise HTTPException(status_code=status, detail=str(error)) from error
-    repository.save_ai_evaluation({"kind": "strategy_proposal", "provider": provenance["provider"], "model": provenance["model"], "actor_id": identity.removeprefix("near:"), "input": {"prompt": request.prompt, "refinement": bool(current)}, "output": proposal.model_dump(mode="json"), "status": "completed", "created_at": datetime.now(timezone.utc).isoformat()})
+    try:
+        repository.save_ai_evaluation({"kind": "strategy_proposal", "provider": provenance["provider"], "model": provenance["model"], "actor_id": identity, "input": {"prompt": request.prompt, "refinement": bool(current)}, "output": proposal.model_dump(mode="json"), "status": "completed", "created_at": datetime.now(timezone.utc).isoformat()})
+    except Exception as error:
+        logger.error("AI proposal generated but persistence failed error_type=%s", type(error).__name__)
+        raise HTTPException(status_code=503, detail="Your strategy was generated, but we couldn't save it yet. Please try again.") from error
     return AIProposalResponse(proposal=proposal.model_dump(mode="json"), provenance=provenance)
 
 
@@ -103,7 +109,11 @@ def strategy_analysis(request: AIAnalysisRequest, identity: str = Depends(requir
     except (AIUnavailableError, AIProviderError, ValueError) as error:
         status = 503 if isinstance(error, AIUnavailableError) else 422
         raise HTTPException(status_code=status, detail=str(error)) from error
-    repository.save_ai_evaluation({"kind": "strategy_analysis", "provider": provenance["provider"], "model": provenance["model"], "actor_id": identity.removeprefix("near:"), "input": {"strategy": request.strategy, "metrics": request.metrics, "question": request.question}, "output": analysis.model_dump(mode="json"), "status": "completed", "created_at": datetime.now(timezone.utc).isoformat()})
+    try:
+        repository.save_ai_evaluation({"kind": "strategy_analysis", "provider": provenance["provider"], "model": provenance["model"], "actor_id": identity, "input": {"strategy": request.strategy, "metrics": request.metrics, "question": request.question}, "output": analysis.model_dump(mode="json"), "status": "completed", "created_at": datetime.now(timezone.utc).isoformat()})
+    except Exception as error:
+        logger.error("AI analysis generated but persistence failed error_type=%s", type(error).__name__)
+        raise HTTPException(status_code=503, detail="Your explanation was ready, but we couldn't save it yet. Please try again.") from error
     return AIAnalysisResponse(analysis=analysis.model_dump(mode="json"), provenance=provenance)
 
 
@@ -275,5 +285,9 @@ def agent_evaluation(request: AgentEvaluationRequest, identity: str = Depends(re
         status = 503 if isinstance(error, AIUnavailableError) else 422
         raise HTTPException(status_code=status, detail=str(error)) from error
     action = "no_action" if request.risk_class == "high" and assessment.action == "accept" else assessment.action
-    repository.save_ai_evaluation({"kind": "agent_evaluation", "provider": provenance["provider"], "model": provenance["model"], "actor_id": identity.removeprefix("near:"), "input": request.model_dump(mode="json"), "output": {**assessment.model_dump(mode="json"), "deterministic_action": action}, "status": "completed", "created_at": datetime.now(timezone.utc).isoformat()})
+    try:
+        repository.save_ai_evaluation({"kind": "agent_evaluation", "provider": provenance["provider"], "model": provenance["model"], "actor_id": identity, "input": request.model_dump(mode="json"), "output": {**assessment.model_dump(mode="json"), "deterministic_action": action}, "status": "completed", "created_at": datetime.now(timezone.utc).isoformat()})
+    except Exception as error:
+        logger.error("AI agent assessment generated but persistence failed error_type=%s", type(error).__name__)
+        raise HTTPException(status_code=503, detail="The strategy signal was analyzed, but we couldn't save the result yet. Please try again.") from error
     return AgentEvaluationResponse(provider=provenance["provider"], model=provenance["model"], strategy_name=request.strategy_name, risk_notes=assessment.risks, action=action, signal_reason=assessment.signal_reason, rationale=assessment.rationale)
