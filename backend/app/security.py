@@ -20,7 +20,7 @@ def _verified_session(token: str) -> dict[str, Any]:
     parts = token.split(".")
     secret = os.getenv("QUORUMARK_SESSION_SECRET", "").encode()
     if len(parts) != 3 or not secret:
-        raise HTTPException(status_code=401, detail="Verified application session required")
+        raise HTTPException(status_code=401, detail="Invalid application session")
     signing_input = f"{parts[0]}.{parts[1]}".encode()
     expected = base64.urlsafe_b64encode(hmac.new(secret, signing_input, hashlib.sha256).digest()).rstrip(b"=")
     if not hmac.compare_digest(expected, parts[2].encode()):
@@ -29,7 +29,13 @@ def _verified_session(token: str) -> dict[str, Any]:
         claims = json.loads(_b64(parts[1]))
     except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=401, detail="Invalid application session") from exc
-    if claims.get("aud") != "quorumark" or not claims.get("sub") or int(claims.get("exp", 0)) <= int(time.time()):
+    if claims.get("aud") != "quorumark" or not claims.get("sub"):
+        raise HTTPException(status_code=401, detail="Invalid application session")
+    try:
+        expires_at = int(claims.get("exp", 0))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=401, detail="Invalid application session") from exc
+    if expires_at <= int(time.time()):
         raise HTTPException(status_code=401, detail="Expired application session")
     return claims
 

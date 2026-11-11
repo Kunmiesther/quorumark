@@ -25,8 +25,9 @@ import {
   type Metrics,
   type Strategy,
 } from "@/lib/strategy-exchange";
-import { getWalletSession, quorumarkApi } from "@/lib/quorumark-api";
+import { getStoredWalletSession, getWalletSession, quorumarkApi } from "@/lib/quorumark-api";
 import { WalletAccountMenu } from "@/components/wallet/WalletAccountMenu";
+import { QuorumarkLogo } from "@/components/brand/QuorumarkLogo";
 
 export type ExchangeView =
   "marketplace" | "detail" | "studio" | "follower" | "subscriptions" | "verification";
@@ -63,11 +64,9 @@ function Shell({
   return (
     <div className="q-exchange">
       <header className="q-exchange-header">
-        <Link to="/marketplace" className="q-exchange-brand">
-          <span className="q-mark">Q</span>
-          <span>
-            Quorumark <small>strategy exchange</small>
-          </span>
+        <Link to="/" className="q-exchange-brand" aria-label="Quorumark home">
+          <QuorumarkLogo compact />
+          <span>Strategy exchange</span>
         </Link>
         <nav className={open ? "q-mobile-open" : ""}>
           <Link to="/marketplace" onClick={close}>
@@ -679,15 +678,18 @@ function Detail({ strategy, onSubscribe }: { strategy: Strategy; onSubscribe: ()
 }
 
 function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }) {
+  const studioDraft = typeof window === "undefined" ? {} : (() => {
+    try { return JSON.parse(window.sessionStorage.getItem("quorumark.studio.draft") ?? "{}"); } catch { return {}; }
+  })();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
-  const [name, setName] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const [market, setMarket] = useState("BTCUSDT");
-  const [cadence, setCadence] = useState("4h");
+  const [name, setName] = useState(studioDraft.name ?? "");
+  const [prompt, setPrompt] = useState(studioDraft.prompt ?? "");
+  const [market, setMarket] = useState(studioDraft.market ?? "BTCUSDT");
+  const [cadence, setCadence] = useState(studioDraft.cadence ?? "4h");
   const [proposal, setProposal] = useState<StrategyProposal | null>(null);
   const [analysis, setAnalysis] = useState<StrategyAnalysis | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
-  const [dataSource, setDataSource] = useState<"fixture" | "historical">("fixture");
+  const [dataSource, setDataSource] = useState<"fixture" | "historical">(studioDraft.dataSource ?? "fixture");
   const [dataSourceLabel, setDataSourceLabel] = useState("quorumark_fixture");
   const [backtestId, setBacktestId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -699,10 +701,13 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
   const [anchoring, setAnchoring] = useState(false);
   const [publicationEvidence, setPublicationEvidence] = useState<{ status: string; transaction_hash?: string } | null>(null);
   const [publishing, setPublishing] = useState(false);
+  useEffect(() => {
+    window.sessionStorage.setItem("quorumark.studio.draft", JSON.stringify({ name, prompt, market, cadence, dataSource }));
+  }, [name, prompt, market, cadence, dataSource]);
   async function generateProposal(instruction = prompt) {
     const wallet = getWalletSession();
     if (!wallet) {
-      setError("Authenticate a NEAR wallet before asking the strategy agent for a proposal.");
+      setError(getStoredWalletSession() ? "Your sign-in has expired. Verify your wallet again to continue." : "Verify your wallet before asking the strategy agent for a proposal.");
       return;
     }
     if (!instruction.trim()) {
@@ -794,7 +799,7 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
   async function analyzeResults() {
     const wallet = getWalletSession();
     if (!wallet) {
-      setError("Verify your wallet before asking for an explanation.");
+      setError(getStoredWalletSession() ? "Your sign-in has expired. Verify your wallet again to continue." : "Verify your wallet before asking for an explanation.");
       return;
     }
     if (!proposal || !metrics) {
@@ -819,7 +824,7 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
   async function saveDraft(publish = false) {
     const wallet = getWalletSession();
     if (!wallet) {
-      setError("Authenticate a wallet before saving a strategy draft.");
+      setError(getStoredWalletSession() ? "Your sign-in has expired. Verify your wallet again to continue." : "Verify your wallet before saving a strategy draft.");
       return;
     }
     if (!metrics) {
@@ -1009,6 +1014,7 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
           {error && (
             <div className="q-notice q-notice-error">
               <CircleAlert size={16} /> {error}
+              {error.toLowerCase().includes("expired") && <Link to="/connect-wallet" className="q-text-link">Verify wallet again</Link>}
             </div>
           )}
         </div>
