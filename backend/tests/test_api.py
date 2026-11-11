@@ -92,6 +92,45 @@ def test_gemini_provider_parses_structured_output_without_exposing_key(monkeypat
     assert provenance == {"provider": "gemini", "model": "gemini-3.5-flash-lite"}
 
 
+def test_near_ai_provider_uses_openai_compatible_chat_response(monkeypatch):
+    proposal = {
+        "name": "NEAR Trend",
+        "description": "A cautious trend strategy for a paper portfolio.",
+        "thesis": "Follow confirmed momentum while limiting downside risk.",
+        "instruments": ["BTCUSDT"],
+        "timeframe": "1h",
+        "indicators": [],
+        "entry_conditions": ["Price is rising with confirmation"],
+        "exit_conditions": ["The trend weakens"],
+        "stop_loss": "Use a defined protective stop.",
+        "take_profit": "Take gains at a predefined target.",
+        "position_sizing": "Risk a small portion of paper equity.",
+        "risk_constraints": ["No leverage"],
+        "unsupported_assumptions": [],
+        "rationale": "The proposal keeps the paper strategy simple and risk-aware.",
+        "simple_explanation": "It waits for a clearer rise and avoids large practice losses.",
+    }
+
+    class FakeResponse:
+        status_code = 200
+        is_success = True
+
+        def json(self):
+            return {"choices": [{"message": {"content": __import__("json").dumps(proposal)}}]}
+
+    monkeypatch.setenv("AI_PROVIDER", "near_ai")
+    monkeypatch.setenv("NEAR_AI_API_KEY", "server-only-near-test-key")
+    monkeypatch.setenv("AI_MODEL", "Qwen/Qwen3.8-27B")
+    monkeypatch.setenv("AI_API_URL", "https://cloud-api.near.ai/v1")
+    calls = []
+    monkeypatch.setattr(ai.httpx, "post", lambda *args, **kwargs: (calls.append((args, kwargs)) or FakeResponse()))
+    result, provenance = ai.generate_strategy_proposal("Build a cautious BTC trend strategy.")
+    assert result.name == "NEAR Trend"
+    assert provenance == {"provider": "near_ai", "model": "Qwen/Qwen3.8-27B"}
+    assert calls[0][0][0] == "https://cloud-api.near.ai/v1/chat/completions"
+    assert calls[0][1]["headers"]["Authorization"] == "Bearer server-only-near-test-key"
+
+
 @pytest.mark.parametrize(
     ("status_code", "payload", "message"),
     [

@@ -146,14 +146,14 @@ _rate_gate = _RateGate()
 
 def _config() -> tuple[str, str, str, int, float]:
     provider = os.getenv("AI_PROVIDER", "disabled").strip().lower()
-    api_key = os.getenv("AI_API_KEY", "").strip()
+    api_key = os.getenv("NEAR_AI_API_KEY", "").strip() if provider == "near_ai" else os.getenv("AI_API_KEY", "").strip()
     api_url = os.getenv("AI_API_URL", "https://api.openai.com/v1/responses").strip()
     model = os.getenv("AI_MODEL", "").strip()
     limit = int(os.getenv("AI_RATE_LIMIT_PER_MINUTE", "10"))
     timeout = float(os.getenv("AI_REQUEST_TIMEOUT_SECONDS", "30"))
     if provider in {"", "disabled"}:
         raise AIUnavailableError("AI strategy assistance is unavailable: AI_PROVIDER is disabled")
-    if provider not in {"openai", "openai_compatible", "gemini"}:
+    if provider not in {"openai", "openai_compatible", "near_ai", "gemini"}:
         raise AIUnavailableError(f"AI strategy assistance is unavailable: unsupported provider '{provider}'")
     if not api_key or not model:
         raise AIUnavailableError("AI strategy assistance is unavailable: provider credentials or AI_MODEL are missing")
@@ -173,6 +173,12 @@ def _output_text(payload: dict[str, Any]) -> str:
                 chunks.append(content["text"])
     if chunks:
         return "".join(chunks)
+    choices = payload.get("choices")
+    if isinstance(choices, list) and choices:
+        message = choices[0].get("message", {})
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, str) and content.strip():
+            return content
     raise AIProviderError("AI provider returned no structured output")
 
 
@@ -212,6 +218,17 @@ def _request(schema_name: str, schema: dict[str, Any], instruction: str) -> tupl
         }
         url = api_url.rstrip("/") + f"/v1beta/models/{model}:generateContent" if "/models/" not in api_url else api_url
         headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
+    elif provider == "near_ai":
+        body = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "You are a careful financial research assistant. Return only the requested JSON object. Never emit executable code. Separate observed facts, calculated metrics, and suggestions."},
+                {"role": "user", "content": instruction},
+            ],
+            "temperature": 0.2,
+        }
+        url = api_url.rstrip("/") + "/chat/completions" if "/chat/completions" not in api_url else api_url
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     else:
         body = {
             "model": model,

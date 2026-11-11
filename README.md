@@ -37,13 +37,18 @@ symbol, interval, and source metadata. If a provider is unreachable, the API
 returns an error; it never substitutes fixture candles or presents history as
 live performance. `MARKET_DATA_API_KEY` is not required by either adapter.
 
-The AI strategy-proposal, refinement, analysis, and agent-assessment routes
-use a server-only Gemini GenerateContent API when `AI_PROVIDER=gemini`, or an
+The AI strategy-proposal, refinement, analysis, and agent-assessment routes use
+a server-only Gemini GenerateContent API when `AI_PROVIDER=gemini`, a NEAR AI
+Cloud OpenAI-compatible chat API when `AI_PROVIDER=near_ai`, or an
 OpenAI-compatible Responses API when `AI_PROVIDER=openai` or
-`openai_compatible`, with `AI_API_KEY` and `AI_MODEL` configured. Outputs are
-strictly schema-validated and persisted as provenance records. With AI
-disabled or unavailable, these routes return an explicit unavailable error;
-they never substitute deterministic text while claiming a model was called.
+`openai_compatible`. All outputs are strictly Pydantic-validated and persisted
+with provider/model provenance. NEAR AI Cloud is optional: configure
+`NEAR_AI_API_KEY`, a model returned by its `/v1/model/list` endpoint, and
+`AI_API_URL=https://cloud-api.near.ai/v1` only after obtaining an authorized
+key. The application does not claim NEAR AI inference until a real request
+succeeds. With AI disabled or unavailable, these routes return an explicit
+unavailable error; they never substitute deterministic text while claiming a
+model was called.
 For the zero-cost Gemini path, create a key in the official Google AI Studio
 (`https://aistudio.google.com/apikey`), without linking a paid billing project,
 then set `AI_PROVIDER=gemini`, `AI_API_KEY` server-side, and

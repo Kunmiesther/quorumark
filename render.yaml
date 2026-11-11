@@ -11,7 +11,7 @@ services:
       - key: QUORUMARK_PYTHON_ENVIRONMENT
         value: hosted
       - key: QUORUMARK_ALLOWED_ORIGINS
-        sync: false
+        value: https://quorumark-web.onrender.com
       - key: QUORUMARK_SUPABASE_URL
         sync: false
       - key: QUORUMARK_SUPABASE_SECRET_KEY
@@ -25,6 +25,8 @@ services:
       - key: AI_PROVIDER
         value: gemini
       - key: AI_API_KEY
+        sync: false
+      - key: NEAR_AI_API_KEY
         sync: false
       - key: AI_MODEL
         value: gemini-3.5-flash

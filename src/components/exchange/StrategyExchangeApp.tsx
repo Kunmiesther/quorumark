@@ -787,7 +787,7 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
           },
         );
       } catch {
-        throw new Error("We couldn't reach the testing service. Check that the local service is running, then try again.");
+        throw new Error("We couldn't connect to the testing service. Check your connection and try again.");
       }
       if (!response.ok) throw new Error(`Strategy testing returned HTTP ${response.status}`);
       const result = await response.json();

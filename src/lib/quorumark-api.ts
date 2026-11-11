@@ -48,7 +48,7 @@ export function clearWalletSession() {
 }
 
 export async function quorumarkApi<T>(path: string, init: RequestInit = {}): Promise<T> {
-  if (!PUBLIC_PYTHON_BACKEND_URL) throw new Error("The local strategy service is not configured");
+  if (!PUBLIC_PYTHON_BACKEND_URL) throw new Error("The strategy service is not configured. Please try again later.");
   const session = getWalletSession();
   const headers = new Headers(init.headers);
   headers.set("content-type", "application/json");
@@ -60,7 +60,7 @@ export async function quorumarkApi<T>(path: string, init: RequestInit = {}): Pro
       headers,
     });
   } catch {
-    throw new Error("We couldn't reach the strategy service. Check that the local service is running, then try again.");
+    throw new Error("We couldn't connect to the strategy service. Check your connection and try again.");
   }
   const body = await response.json().catch(() => null);
   if (response.status === 401) {
