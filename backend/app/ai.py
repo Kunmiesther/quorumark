@@ -226,7 +226,10 @@ def _request(schema_name: str, schema: dict[str, Any], instruction: str) -> tupl
             response = httpx.post(url, headers=headers, json=body, timeout=timeout)
         except httpx.HTTPError as error:
             logger.warning("AI provider network failure provider=%s model=%s error_type=%s", provider, model, type(error).__name__)
-            raise AIUnavailableError("AI provider could not be reached. Try again shortly.") from error
+            if attempt == 2:
+                raise AIUnavailableError("AI provider could not be reached. Try again shortly.") from error
+            time.sleep(0.5 * (attempt + 1))
+            continue
         if response.status_code < 500 or attempt == 2:
             break
         time.sleep(0.5 * (attempt + 1))

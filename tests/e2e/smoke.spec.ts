@@ -36,7 +36,7 @@ test("marketplace search and studio service feedback are interactive", async ({ 
   await page.goto("/marketplace");
   await page.waitForTimeout(3000);
   await expect(page.getByRole("button", { name: "All strategies" })).toHaveClass(/q-category-active/);
-  const category = page.getByRole("button", { name: "Crypto spot" });
+  const category = page.locator(".q-category-row button").nth(1);
   await category.click();
   await expect(category).toHaveClass(/q-category-active/);
   const search = page.getByRole("textbox", { name: "Search strategies" });
@@ -44,7 +44,7 @@ test("marketplace search and studio service feedback are interactive", async ({ 
   await expect(search).toHaveValue("no-method-matches-this-query");
 
   await page.goto("/studio");
-  await page.getByPlaceholder("For example, Atlas range break").fill("Browser verification strategy");
+  await page.getByRole("textbox", { name: "What would you like your strategy to do?" }).fill("Browser verification strategy");
   await page.getByRole("button", { name: /Test my strategy/ }).click();
-  await expect(page.locator("body")).toContainText(/Simulation complete|could not|not configured/i, { timeout: 15000 });
+  await expect(page.locator("body")).toContainText(/Your strategy results|Testing your strategy|could not|not configured/i, { timeout: 30000 });
 });

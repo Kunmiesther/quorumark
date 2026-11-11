@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
+    "dev:local": "powershell -ExecutionPolicy Bypass -File scripts/start-local.ps1",
+    "dev:hosted": "powershell -ExecutionPolicy Bypass -File scripts/start-local.ps1 -HostedPersistence",
     "backend:dev": "python -m uvicorn app.main:app --reload --app-dir backend --port 8000",
     "build": "vite build",
     "preview": "vite preview",

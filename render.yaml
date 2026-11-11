@@ -1,0 +1,66 @@
+services:
+  - type: web
+    name: quorumark-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: QUORUMARK_PYTHON_ENVIRONMENT
+        value: hosted
+      - key: QUORUMARK_ALLOWED_ORIGINS
+        sync: false
+      - key: QUORUMARK_SUPABASE_URL
+        sync: false
+      - key: QUORUMARK_SUPABASE_SECRET_KEY
+        sync: false
+      - key: QUORUMARK_SESSION_SECRET
+        sync: false
+      - key: QUORUMARK_NEAR_EVIDENCE_CONTRACT_ID
+        value: quorumark-evidence.testnet
+      - key: VITE_NEAR_RPC_URL
+        value: https://rpc.testnet.near.org
+      - key: AI_PROVIDER
+        value: gemini
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        value: gemini-3.5-flash
+      - key: AI_API_URL
+        value: https://generativelanguage.googleapis.com
+      - key: AI_RATE_LIMIT_PER_MINUTE
+        value: "10"
+      - key: AI_REQUEST_TIMEOUT_SECONDS
+        value: "30"
+      - key: QUORUMARK_EXECUTION_ENVIRONMENT
+        value: paper
+      - key: QUORUMARK_ALLOW_LIVE_EXECUTION
+        value: "false"
+
+  - type: web
+    name: quorumark-web
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: node dist/server/server.js
+    envVars:
+      - key: VITE_APP_URL
+        sync: false
+      - key: VITE_PYTHON_BACKEND_URL
+        sync: false
+      - key: VITE_SUPABASE_PROJECT_ID
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: VITE_NEAR_NETWORK
+        value: testnet
+      - key: VITE_NEAR_RPC_URL
+        value: https://rpc.testnet.near.org
+      - key: VITE_NEAR_EVIDENCE_CONTRACT_ID
+        value: quorumark-evidence.testnet
+      - key: VITE_WALLETCONNECT_PROJECT_ID
+        sync: false

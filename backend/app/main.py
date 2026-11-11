@@ -30,11 +30,40 @@ from .marketplace import (
     to_public_strategy,
 )
 
+
+def _load_local_environment() -> None:
+    """Load local env files without overriding deployment-provided variables."""
+    if os.getenv("QUORUMARK_DISABLE_LOCAL_ENV") == "true":
+        return
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    for filename in (".env.local", ".env"):
+        path = os.path.join(root, filename)
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as env_file:
+                lines = env_file.readlines()
+        except OSError:
+            continue
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
+_load_local_environment()
+
 app = FastAPI(title="Quorumark Strategy Engine", version="0.1.0")
 logger = logging.getLogger(__name__)
+allowed_origins = [origin.strip() for origin in os.getenv("QUORUMARK_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=allowed_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["content-type", "authorization"],

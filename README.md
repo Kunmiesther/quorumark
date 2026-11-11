@@ -87,9 +87,10 @@ the UI and rejection paths but does not approve wallet prompts.
 
 The release intentionally excludes live trading, real-money settlement,
 custody, recovery phrases, cross-chain settlement claims, and unsupported AI
-autonomy. NEAR publication evidence is unavailable until a dedicated testnet
-contract account is deployed and both public and server-only contract IDs are
-configured.
+autonomy. The publication-evidence contract is deployed at
+`quorumark-evidence.testnet`; a creator must still approve each publication
+transaction in a testnet wallet before the application can display confirmed
+evidence.
 
 ## Local development
 
@@ -119,6 +120,27 @@ python -m uvicorn app.main:app --reload --app-dir backend --port 8000
 ```
 
 Set `VITE_PYTHON_BACKEND_URL=http://127.0.0.1:8000` in `.env.local`, then start the frontend with `npm run dev`. Strategy Studio sends its validated candle fixture to the Python service and renders the returned metrics; it does not silently fall back to frontend-generated performance.
+
+For a clean Windows start with readiness checks, use `npm.cmd run dev:local`.
+For local hosted-Supabase persistence, use `npm.cmd run dev:hosted`. The launcher
+starts only missing services, checks both `/health` and the frontend, and writes
+sanitized process logs under the system temporary directory. It never prints
+provider keys or session secrets.
+
+## Public deployment preparation
+
+`render.yaml` defines the smallest free-tier deployment shape: one FastAPI web
+service and one TanStack/Vite Node web service. Render documents free web
+services and static sites, but free services can sleep and are intended for
+testing or hobby use, not production. Deployment still requires the repository
+owner to authorize a Render/GitHub connection and enter the server-only values
+in the dashboard. Set `VITE_PYTHON_BACKEND_URL` to the final HTTPS API URL and
+`QUORUMARK_ALLOWED_ORIGINS` to the final HTTPS frontend URL before testing.
+
+Required server-only deployment values are `QUORUMARK_SUPABASE_SECRET_KEY`,
+`QUORUMARK_SESSION_SECRET`, and `AI_API_KEY`. Required public values include
+the Supabase URL and publishable key. Never put the server-only values in a
+`VITE_*` variable or commit them.
 
 The Python service also owns follower paper decisions at `POST /v1/paper/executions`. It validates candle chronology and freshness, evaluates the follower's independent limits, applies paper fees and slippage, records an idempotency key, and returns a `paper_traded` evidence hash. The endpoint never calls a broker or signer.
 
