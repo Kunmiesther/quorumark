@@ -32,6 +32,23 @@ test("mobile marketplace remains readable", async ({ page }) => {
   await expect(page.locator("body")).not.toHaveCSS("overflow-x", "scroll");
 });
 
+test("production asset URLs return files with correct MIME types", async ({ request }) => {
+  const origin = process.env.PRODUCTION_BASE_URL || "http://127.0.0.1:3000";
+  const document = await request.get(origin);
+  expect(document.status()).toBe(200);
+  const html = await document.text();
+  const stylesheet = html.match(/(?:href|src)=["']([^"']+\.css)["']/)?.[1];
+  const script = html.match(/(?:href|src)=["']([^"']+\.js)["']/)?.[1];
+  expect(stylesheet).toBeTruthy();
+  expect(script).toBeTruthy();
+  const css = await request.get(new URL(stylesheet!, origin).toString());
+  const js = await request.get(new URL(script!, origin).toString());
+  expect(css.status()).toBe(200);
+  expect(css.headers()["content-type"]).toMatch(/text\/css/);
+  expect(js.status()).toBe(200);
+  expect(js.headers()["content-type"]).toMatch(/javascript/);
+});
+
 test("marketplace search and studio service feedback are interactive", async ({ page }) => {
   await page.goto("/marketplace");
   await page.waitForTimeout(3000);

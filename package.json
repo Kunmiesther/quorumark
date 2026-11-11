@@ -9,6 +9,7 @@
     "dev:hosted": "powershell -ExecutionPolicy Bypass -File scripts/start-local.ps1 -HostedPersistence",
     "backend:dev": "python -m uvicorn app.main:app --reload --app-dir backend --port 8000",
     "build": "vite build",
+    "verify:production": "node scripts/verify-production-assets.mjs",
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run"
