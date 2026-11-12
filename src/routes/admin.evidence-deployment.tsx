@@ -4,14 +4,7 @@ import { Check, Loader2, ShieldCheck, WalletCards } from "lucide-react";
 import { quorumarkApi, getWalletSession } from "@/lib/quorumark-api";
 import { ensureBrowserPolyfills } from "@/lib/browser-polyfills";
 import { getNearSelector } from "@/lib/wallet/near";
-import {
-  EVIDENCE_CONTRACT_ACCOUNT,
-  EVIDENCE_CONTRACT_OWNER,
-  EVIDENCE_CONTRACT_FUNDING_YOCTO,
-  assertChildSignerCapability,
-  prepareEvidenceAccountCreation,
-  prepareEvidenceContractDeployment,
-} from "@/lib/near-evidence-contract-deployment";
+import { EVIDENCE_CONTRACT_ACCOUNT, EVIDENCE_CONTRACT_OWNER, prepareEvidenceContractDeployment } from "@/lib/near-evidence-contract-deployment";
 
 export const Route = createFileRoute("/admin/evidence-deployment")({
   ssr: false,
@@ -21,11 +14,9 @@ export const Route = createFileRoute("/admin/evidence-deployment")({
 
 type DeploymentStatus = {
   authorized_account: string;
-  child_account: string;
-  parent_balance_yocto: string | null;
-  child_exists: boolean;
-  child_balance_yocto: string | null;
-  wallet_full_access_key_matches: boolean;
+  account_id: string;
+  balance_yocto: string | null;
+  account_exists: boolean;
   code_hash: string | null;
   initialized: boolean;
   owner_id: string | null;
@@ -34,9 +25,8 @@ type DeploymentStatus = {
 function EvidenceDeploymentPage() {
   const [status, setStatus] = useState<DeploymentStatus | null>(null);
   const [accountId, setAccountId] = useState<string | null>(null);
-  const [publicKey, setPublicKey] = useState<string | null>(null);
-  const [message, setMessage] = useState("Checking the authorized wallet and testnet account…");
-  const [busy, setBusy] = useState<"account" | "contract" | null>(null);
+  const [message, setMessage] = useState("Checking the authorized wallet and testnet account...");
+  const [busy, setBusy] = useState(false);
   const [lastTransaction, setLastTransaction] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -54,66 +44,43 @@ function EvidenceDeploymentPage() {
       return;
     }
     setAccountId(account.accountId);
-    setPublicKey(account.publicKey ?? null);
     const next = await quorumarkApi<DeploymentStatus>("/v1/admin/evidence-deployment/status", {
       method: "POST",
-      body: JSON.stringify({ public_key: account.publicKey }),
+      body: JSON.stringify({}),
     });
     setStatus(next);
-    setMessage(next.initialized ? "The evidence contract is initialized. This deployment page is no longer active." : "The deployment checks are ready.");
+    setMessage(next.initialized ? "The evidence contract is initialized." : "The deployment checks are ready.");
   }, []);
 
   useEffect(() => {
     refresh().catch((error) => setMessage(error instanceof Error ? error.message : "We couldn't check the deployment status."));
   }, [refresh]);
 
-  async function approveAccountCreation() {
-    if (!accountId || !publicKey) return;
-    setBusy("account");
-    setMessage("Review the account-creation request in Meteor Wallet.");
-    try {
-      await ensureBrowserPolyfills();
-      const selector = await getNearSelector();
-      const wallet = await selector.wallet();
-      assertChildSignerCapability(wallet);
-      const plan = prepareEvidenceAccountCreation(accountId, EVIDENCE_CONTRACT_ACCOUNT, publicKey);
-      const outcomes = await wallet.signAndSendTransactions({ transactions: [plan] });
-      const hash = outcomes?.[0]?.transaction?.hash;
-      if (hash) setLastTransaction(hash);
-      setMessage("Account creation was approved. Verifying the child account through NEAR RPC…");
-      await refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The account-creation request was not completed.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
   async function approveContractDeployment() {
-    setBusy("contract");
-    setMessage("Review the contract deployment and initialization request in Meteor Wallet.");
+    setBusy(true);
+    setMessage("Review the deployment and initialization request in Meteor Wallet.");
     try {
       await ensureBrowserPolyfills();
       const response = await fetch("/quorumark_publication_evidence.wasm");
       if (!response.ok) throw new Error("The evidence contract package is unavailable.");
       const selector = await getNearSelector();
       const wallet = await selector.wallet();
-      assertChildSignerCapability(wallet);
+      if (!wallet.signAndSendTransaction) throw new Error("The selected wallet cannot approve this NEAR testnet transaction.");
       const plan = prepareEvidenceContractDeployment(new Uint8Array(await response.arrayBuffer()));
-      const outcomes = await wallet.signAndSendTransactions({ transactions: [plan] });
-      const hash = outcomes?.[0]?.transaction?.hash;
-      if (hash) setLastTransaction(hash);
-      setMessage("Deployment was approved. Verifying code and initialization through NEAR RPC…");
+      const outcome = await wallet.signAndSendTransaction(plan);
+      const hash = outcome?.transaction?.hash;
+      if (!hash) throw new Error("The wallet did not return a verifiable transaction outcome.");
+      setLastTransaction(hash);
+      setMessage("The transaction was approved. Verifying deployment through NEAR RPC...");
       await refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The deployment request was not completed.");
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   }
 
   const ownerReady = accountId === EVIDENCE_CONTRACT_OWNER;
-  const childReady = Boolean(status?.child_exists && status.wallet_full_access_key_matches);
 
   return (
     <main className="q-connect-page">
@@ -124,33 +91,23 @@ function EvidenceDeploymentPage() {
       <section className="q-connect-card" aria-labelledby="deployment-title">
         <p className="q-kicker">Owner-only testnet setup</p>
         <h1 id="deployment-title">Prepare the evidence contract</h1>
-        <p>This temporary page can only be used by the verified estarkunmi.testnet account. It never asks for a private key.</p>
+        <p>This temporary page is restricted to the verified estarkunmi.testnet account. It never asks for a private key.</p>
         <div className="q-connected-state" style={{ marginTop: 24 }}>
           {ownerReady ? <Check size={20} /> : <ShieldCheck size={20} />}
           <div><strong>{accountId ?? "Wallet not verified"}</strong><span>{message}</span></div>
-          <button className="q-secondary" onClick={() => refresh().catch((error) => setMessage(error instanceof Error ? error.message : "We couldn't refresh the deployment checks."))} disabled={busy !== null}>Refresh checks</button>
+          <button className="q-secondary" onClick={() => refresh().catch((error) => setMessage(error instanceof Error ? error.message : "We couldn't refresh the deployment checks."))} disabled={busy}>Refresh checks</button>
         </div>
-        {status && !status.initialized && (
-          <div style={{ display: "grid", gap: 16, marginTop: 24 }}>
-            <div className="q-wallet-primary">
-              <h2>1. Create the contract account</h2>
-              <p>Signer: <strong>estarkunmi.testnet</strong><br />Receiver: <strong>evidence.estarkunmi.testnet</strong><br />Funding: <strong>1.8 testnet NEAR</strong><br />Network: <strong>NEAR testnet</strong></p>
-              <button className="q-primary q-full" onClick={approveAccountCreation} disabled={busy !== null || status.child_exists}>
-                {busy === "account" ? <Loader2 className="q-spin" size={16} /> : <WalletCards size={16} />} {status.child_exists ? "Account already exists" : "Approve account creation"}
-              </button>
-            </div>
-            <div className="q-wallet-primary">
-              <h2>2. Deploy and initialize</h2>
-              <p>Signer: <strong>evidence.estarkunmi.testnet</strong><br />Actions: <strong>DeployContract, then new</strong><br />Owner: <strong>estarkunmi.testnet</strong><br />Deposit: <strong>0 NEAR</strong></p>
-              <button className="q-primary q-full" onClick={approveContractDeployment} disabled={busy !== null || !childReady || status.initialized}>
-                {busy === "contract" ? <Loader2 className="q-spin" size={16} /> : <WalletCards size={16} />} Approve deployment and initialization
-              </button>
-              {!childReady && <small>Waiting for RPC confirmation that the child has the wallet-controlled FullAccess key.</small>}
-            </div>
+        {status && !status.initialized && ownerReady && (
+          <div className="q-wallet-primary" style={{ display: "grid", gap: 16, marginTop: 24 }}>
+            <h2>Deploy and initialize the evidence contract</h2>
+            <p>Signer: <strong>estarkunmi.testnet</strong><br />Receiver: <strong>estarkunmi.testnet</strong><br />Actions: <strong>DeployContract, then new</strong><br />Initialization: <strong>{`{"owner_id":"estarkunmi.testnet"}`}</strong><br />Deposit: <strong>0 NEAR</strong><br />Network: <strong>NEAR testnet</strong></p>
+            <button className="q-primary q-full" onClick={approveContractDeployment} disabled={busy}>
+              {busy ? <Loader2 className="q-spin" size={16} /> : <WalletCards size={16} />} Approve deployment and initialization
+            </button>
           </div>
         )}
         {status?.initialized && <div className="q-connected-state" style={{ marginTop: 24 }}><Check size={20} /><div><strong>Contract ready</strong><span>Owner verified as {status.owner_id}</span></div></div>}
-        {lastTransaction && <p className="q-connect-note">Latest confirmed transaction: {lastTransaction}</p>}
+        {lastTransaction && <p className="q-connect-note">Transaction submitted for independent verification: {lastTransaction}</p>}
       </section>
     </main>
   );

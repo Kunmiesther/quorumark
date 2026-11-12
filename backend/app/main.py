@@ -98,8 +98,8 @@ def health() -> dict[str, str | bool]:
     return {"service": "quorumark-python-engine", "status": "ok", "paper_only": True}
 
 
-EVIDENCE_DEPLOYMENT_ACCOUNT = "evidence.estarkunmi.testnet"
 EVIDENCE_DEPLOYMENT_OWNER = "estarkunmi.testnet"
+EVIDENCE_DEPLOYMENT_ACCOUNT = EVIDENCE_DEPLOYMENT_OWNER
 
 
 def _evidence_deployment_enabled() -> bool:
@@ -139,23 +139,15 @@ def evidence_deployment_status(request: EvidenceDeploymentStatusRequest, identit
     if resolve_near_account(identity) != EVIDENCE_DEPLOYMENT_OWNER:
         raise HTTPException(status_code=403, detail="Only the authorized NEAR creator can use this page")
     parent = _near_rpc_query({"request_type": "view_account", "finality": "final", "account_id": EVIDENCE_DEPLOYMENT_OWNER})
-    child = _near_rpc_query({"request_type": "view_account", "finality": "final", "account_id": EVIDENCE_DEPLOYMENT_ACCOUNT})
-    child_exists = "error" not in child and bool(child.get("amount"))
-    access_keys: list[dict[str, object]] = []
-    key_result = None
-    if child_exists:
-        key_result = _near_rpc_query({"request_type": "view_access_key_list", "finality": "final", "account_id": EVIDENCE_DEPLOYMENT_ACCOUNT})
-        access_keys = key_result.get("keys", []) if isinstance(key_result, dict) else []
-    key_matches = any(item.get("public_key") == request.public_key and item.get("access_key", {}).get("permission") == "FullAccess" for item in access_keys if isinstance(item, dict))
-    owner = _near_view(EVIDENCE_DEPLOYMENT_ACCOUNT, "owner_id") if child_exists else None
+    account = parent
+    account_exists = "error" not in account and bool(account.get("amount"))
+    owner = _near_view(EVIDENCE_DEPLOYMENT_ACCOUNT, "owner_id") if account_exists and account.get("code_hash") != "11111111111111111111111111111111" else None
     return {
         "authorized_account": EVIDENCE_DEPLOYMENT_OWNER,
-        "child_account": EVIDENCE_DEPLOYMENT_ACCOUNT,
-        "parent_balance_yocto": parent.get("amount") if isinstance(parent, dict) else None,
-        "child_exists": child_exists,
-        "child_balance_yocto": child.get("amount") if child_exists else None,
-        "wallet_full_access_key_matches": key_matches,
-        "code_hash": child.get("code_hash") if child_exists else None,
+        "account_id": EVIDENCE_DEPLOYMENT_ACCOUNT,
+        "balance_yocto": account.get("amount") if isinstance(account, dict) else None,
+        "account_exists": account_exists,
+        "code_hash": account.get("code_hash") if account_exists else None,
         "initialized": owner is not None,
         "owner_id": owner,
     }
