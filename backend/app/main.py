@@ -25,6 +25,7 @@ from .marketplace import (
     SubscriptionRequest,
     PublicationPrepareRequest,
     PublicationConfirmRequest,
+    StrategyPublishRequest,
     create_strategy,
     require_local_identity,
     to_public_strategy,
@@ -240,25 +241,42 @@ def create_version(strategy_id: str, request: StrategyVersionRequest, identity: 
     strategy = repository.get_strategy(strategy_id)
     if not strategy or strategy["creator_id"] != identity:
         raise HTTPException(status_code=404, detail="Strategy not found")
-    existing = next((item for item in repository.list_versions(strategy["id"]) if item.get("version") == request.version), None)
+    versions = repository.list_versions(strategy["id"])
+    existing = next((item for item in versions if item.get("version") == request.version), None)
     requested_hash = request.evidence_hash or evidence_hash(request.definition)
     if existing:
         if requested_hash and existing.get("content_hash") != requested_hash:
-            raise HTTPException(status_code=409, detail="That version is immutable. Create a new version for these changes.")
-        return existing
+            if strategy.get("status") != "published":
+                raise HTTPException(status_code=409, detail="That version is immutable. Create a new version for these changes.")
+            used_versions = {str(item.get("version")) for item in versions}
+            next_number = 1
+            while f"v{next_number}.0" in used_versions:
+                next_number += 1
+            request = request.model_copy(update={"version": f"v{next_number}.0"})
+            existing = None
+        else:
+            return existing
     version = repository.save_strategy_version(strategy["id"], request.version, request.definition, request.backtest_id, request.backtest_metrics, requested_hash, datetime.now(timezone.utc).isoformat())
-    updated = repository.update_strategy(strategy["id"], identity, current_version=request.version)
+    updated = repository.update_strategy(strategy["id"], identity, current_version=request.version) if strategy.get("status") != "published" else strategy
     return {**version, "strategy": updated or strategy}
 
 
 @app.post("/v1/strategies/{strategy_id}/publish")
-def publish_strategy(strategy_id: str, identity: str = Depends(require_local_identity)) -> dict[str, object]:
+def publish_strategy(strategy_id: str, request: StrategyPublishRequest | None = None, identity: str = Depends(require_local_identity)) -> dict[str, object]:
     strategy = repository.get_strategy(strategy_id)
     if not strategy or strategy["creator_id"] != identity:
         raise HTTPException(status_code=404, detail="Strategy not found")
-    if not repository.list_versions(strategy["id"]):
+    versions = repository.list_versions(strategy["id"])
+    selected = None
+    if request and request.version_id:
+        selected = next((item for item in versions if str(item.get("id")) == request.version_id), None)
+        if not selected:
+            raise HTTPException(status_code=404, detail="Strategy version not found")
+    if selected is None:
+        selected = next((item for item in versions if item.get("version") == strategy.get("current_version")), None)
+    if not selected:
         raise HTTPException(status_code=409, detail="Create a version before publishing")
-    updated = repository.update_strategy(strategy["id"], identity, status="published", published_at=datetime.now(timezone.utc).isoformat())
+    updated = repository.update_strategy(strategy["id"], identity, status="published", current_version=selected["version"], published_at=datetime.now(timezone.utc).isoformat())
     return updated or strategy
 
 

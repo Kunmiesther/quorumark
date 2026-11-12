@@ -884,11 +884,17 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
       });
       setSavedVersionId(version.id);
       setSavedVersion(version.version ?? nextVersion);
+      setPublicationEvidence(null);
+      setPreparedPublication(null);
       if (publish) {
-        await quorumarkApi(`/v1/strategies/${created.id}/publish`, { method: "POST" });
+        await quorumarkApi(`/v1/strategies/${created.id}/publish`, {
+          method: "POST",
+          body: JSON.stringify({ version_id: version.id }),
+        });
         setPublished(true);
         toast.success("Strategy published to the local paper marketplace");
       } else {
+        setPublished(false);
         toast.success("Strategy draft saved");
       }
     } catch (saveError) {

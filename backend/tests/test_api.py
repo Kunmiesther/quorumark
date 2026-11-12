@@ -264,6 +264,42 @@ def test_local_marketplace_creator_lifecycle_is_owner_scoped(tmp_path: Path, mon
     assert client.post(f"/v1/strategies/{strategy_id}/publish", headers={"x-quorumark-identity": "near:other.testnet"}).status_code == 404
 
 
+def test_published_version_is_preserved_when_creator_saves_changes(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(main, "repository", PaperRepository(str(tmp_path / "version-lifecycle.db")))
+    client = TestClient(app)
+    headers = {"x-quorumark-identity": "near:creator.testnet"}
+    created = client.post("/v1/strategies", headers=headers, json={
+        "name": "Versioned Bitcoin Practice",
+        "thesis": "A strategy used to verify immutable version handling.",
+        "market": "Crypto spot",
+        "supported_assets": ["BTCUSDT"],
+        "risk_class": "low",
+        "definition": {"type": "reference_crossover"},
+    })
+    strategy_id = created.json()["id"]
+    first = client.post(f"/v1/strategies/{strategy_id}/versions", headers=headers, json={
+        "version": "v1.0",
+        "definition": {"fast_window": 3},
+    })
+    assert first.status_code == 201
+    assert client.post(f"/v1/strategies/{strategy_id}/publish", headers=headers, json={"version_id": first.json()["id"]}).status_code == 200
+
+    second = client.post(f"/v1/strategies/{strategy_id}/versions", headers=headers, json={
+        "version": "v1.0",
+        "definition": {"fast_window": 5},
+    })
+    assert second.status_code == 201
+    assert second.json()["version"] == "v2.0"
+    assert second.json()["id"] != first.json()["id"]
+    published = client.post(f"/v1/strategies/{strategy_id}/publish", headers=headers, json={"version_id": second.json()["id"]})
+    assert published.status_code == 200
+    assert published.json()["current_version"] == "v2.0"
+
+    versions = client.get(f"/v1/strategies/{strategy_id}/versions", headers=headers).json()
+    by_version = {item["version"]: item for item in versions}
+    assert by_version["v1.0"]["definition"] != by_version["v2.0"]["definition"]
+
+
 def test_publication_evidence_resolves_hosted_wallet_identity(tmp_path: Path, monkeypatch):
     repository = PaperRepository(str(tmp_path / "publication.db"))
     monkeypatch.setattr(main, "repository", repository)

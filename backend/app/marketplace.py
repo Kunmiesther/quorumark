@@ -39,6 +39,10 @@ class StrategyVersionRequest(BaseModel):
     evidence_hash: str | None = Field(default=None, max_length=128)
 
 
+class StrategyPublishRequest(BaseModel):
+    version_id: str | None = Field(default=None, min_length=1, max_length=120)
+
+
 class SubscriptionRequest(BaseModel):
     strategy_id: str = Field(min_length=1, max_length=120)
     environment: str = Field(default="sandbox", pattern="^(sandbox|near_testnet)$")

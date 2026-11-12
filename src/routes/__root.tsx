@@ -13,7 +13,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     { title: "Quorumark Strategy Exchange" },
   ], links: [
     { rel: "stylesheet", href: appCss },
-    { rel: "icon", type: "image/svg+xml", href: "/quorumark-mark.svg?v=2" },
+    { rel: "icon", type: "image/svg+xml", href: "/quorumark-mark.svg?v=3" },
   ] }),
   shellComponent: RootShell,
   component: RootComponent,
