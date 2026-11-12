@@ -19,7 +19,7 @@ services:
       - key: QUORUMARK_SESSION_SECRET
         sync: false
       - key: QUORUMARK_NEAR_EVIDENCE_CONTRACT_ID
-        value: quorumark-evidence.testnet
+        value: quorumark-evidence-dedicated.testnet
       - key: VITE_NEAR_RPC_URL
         value: https://rpc.testnet.near.org
       - key: AI_PROVIDER
@@ -71,8 +71,8 @@ services:
       - key: VITE_NEAR_RPC_URL
         value: https://rpc.testnet.near.org
       - key: VITE_NEAR_EVIDENCE_CONTRACT_ID
-        value: quorumark-evidence.testnet
+        value: quorumark-evidence-dedicated.testnet
       - key: QUORUMARK_EVIDENCE_DEPLOYMENT_ENABLED
-        value: "true"
+        value: "false"
       - key: VITE_WALLETCONNECT_PROJECT_ID
         sync: false

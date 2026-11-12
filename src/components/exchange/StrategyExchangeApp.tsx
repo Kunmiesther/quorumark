@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { PUBLIC_PYTHON_BACKEND_URL } from "@/lib/public-env";
+import { PUBLIC_NEAR_EVIDENCE_CONTRACT_ID, PUBLIC_PYTHON_BACKEND_URL } from "@/lib/public-env";
 import {
   evaluateSignal,
   loadExchangeState,
@@ -1109,7 +1109,7 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
                   <ShieldCheck size={16} />
                   <div>
                     <strong>Review before opening your wallet</strong>
-                    <p>Network: NEAR testnet · Receiver: quorumark-evidence.testnet</p>
+                    <p>Network: NEAR testnet · Receiver: {PUBLIC_NEAR_EVIDENCE_CONTRACT_ID}</p>
                     <p>Method: record_publication · Deposit: 0 NEAR · Expected fee: up to 0.00003 NEAR in gas</p>
                     <p>Commitment: <code>{preparedPublication.commitment}</code></p>
                     <p>Strategy ID: <code>{savedStrategyId}</code> · Version ID: <code>{preparedPublication.version_id}</code></p>

@@ -94,7 +94,7 @@ the UI and rejection paths but does not approve wallet prompts.
 
 - Web application: https://quorumark-web.onrender.com
 - Python service health: https://quorumark-api.onrender.com/health
-- Evidence contract: `quorumark-evidence.testnet`
+- Evidence contract: `quorumark-evidence-dedicated.testnet`
 
 For a two-to-three minute demonstration: open the landing page and Marketplace;
 enter Strategy Studio and describe a cautious Bitcoin method; show the AI
@@ -111,7 +111,7 @@ signature, AI provider call, historical return, or blockchain transaction.
 The release intentionally excludes live trading, real-money settlement,
 custody, recovery phrases, cross-chain settlement claims, and unsupported AI
 autonomy. The publication-evidence contract is deployed at
-`quorumark-evidence.testnet`; a creator must still approve each publication
+`quorumark-evidence-dedicated.testnet`; the owner-controlled publisher must still approve each publication
 transaction in a testnet wallet before the application can display confirmed
 evidence.
 
