@@ -91,13 +91,9 @@ backend marks a version verified only after NEAR RPC confirms the signer,
 receiver, method arguments, and final receipt. Until then the product displays
 "verification pending" rather than opening an unauthorized wallet prompt.
 
-Automatic evidence recording is available only through the server-side
-publication worker (`npm run publication-worker`). It requires the dedicated
-contract owner's private key as a Render/server secret named
-`NEAR_OWNER_PRIVATE_KEY`, plus the existing server-only Supabase variables.
-The key is read only in the worker process and is never sent to the browser,
-stored in Supabase, or printed. If that secret is not provisioned, jobs remain
-durably pending and the marketplace does not claim on-chain verification.
+Evidence recording is creator-authorized: the authenticated creator's NEAR
+wallet signs the ordinary `record_publication` FunctionCall. No backend owner
+signer, worker, private key, or scheduler is required.
 
 For a credential-safe demo, use the public landing page, inspect the sample in
 Marketplace, run the Studio simulation, open Follower to apply risk controls,

@@ -10,7 +10,6 @@
     "backend:dev": "python -m uvicorn app.main:app --reload --app-dir backend --port 8000",
     "build": "vite build",
     "verify:production": "node scripts/verify-production-assets.mjs",
-    "publication-worker": "node scripts/publication-worker.mjs",
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run"

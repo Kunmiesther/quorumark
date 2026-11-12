@@ -918,6 +918,28 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
       setAnchoring(false);
     }
   }
+  async function approvePreparedPublication() {
+    if (!savedStrategyId || !preparedPublication) return;
+    setAnchoring(true);
+    setError(null);
+    try {
+      const { ensureBrowserPolyfills } = await import("@/lib/browser-polyfills");
+      await ensureBrowserPolyfills();
+      const { anchorPublication } = await import("@/lib/near-publication-evidence");
+      const submitted = await anchorPublication({ strategy_id: savedStrategyId, version_id: preparedPublication.version_id, creator_near_account: preparedPublication.creator_near_account, network: preparedPublication.network }, preparedPublication.commitment);
+      const confirmed = await quorumarkApi<{ status: string; transaction_hash?: string }>(
+        `/v1/strategies/${savedStrategyId}/publication-evidence/${preparedPublication.version_id}/confirm`,
+        { method: "POST", body: JSON.stringify({ transaction_hash: submitted.transaction_hash }) },
+      );
+      setPublicationEvidence(confirmed);
+      setPreparedPublication(null);
+      toast.success("Strategy verification confirmed on NEAR testnet");
+    } catch (anchorError) {
+      setError(anchorError instanceof Error ? anchorError.message : "NEAR testnet verification could not be completed. Your strategy is still saved.");
+    } finally {
+      setAnchoring(false);
+    }
+  }
   return (
     <section>
       <button className="q-back" onClick={onBack}>
@@ -1098,7 +1120,10 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
                     <p>Method: record_publication · Deposit: 0 NEAR · Expected fee: up to 0.00003 NEAR in gas</p>
                     <p>Commitment: <code>{preparedPublication.commitment}</code></p>
                     <p>Strategy ID: <code>{savedStrategyId}</code> · Version ID: <code>{preparedPublication.version_id}</code></p>
-                    <small>This evidence records the exact published version. It does not prove profitability or market-data accuracy.</small>
+                    <small>This records the exact published version. It does not prove profitability or market-data accuracy.</small>
+                    <button className="q-primary" onClick={approvePreparedPublication} disabled={anchoring}>
+                      {anchoring ? "Waiting for wallet approval..." : "Record verification on NEAR"}
+                    </button>
                     <details>
                       <summary>View verification details</summary>
                       <p>Transaction method: record_publication · Deposit: 0 NEAR · Gas: 30 Tgas</p>

@@ -1,4 +1,6 @@
 import { PUBLIC_NEAR_EVIDENCE_CONTRACT_ID, PUBLIC_NEAR_NETWORK, PUBLIC_NEAR_RPC_URL } from "@/lib/public-env";
+import { actionCreators } from "@near-wallet-selector/core";
+import { getNearSelector } from "@/lib/wallet/near";
 
 export const PUBLICATION_SCHEMA_VERSION = "quorumark.publication.v1" as const;
 const PUBLICATION_DOMAIN = "quorumark:near:testnet:publication:v1";
@@ -51,4 +53,32 @@ export async function assertPublicationContractReady(): Promise<void> {
   if (!response.ok || payload?.error || payload?.result?.error || !payload?.result?.result) {
     throw new Error("NEAR publication evidence is not ready yet. The testnet contract must be initialized before approval.");
   }
+}
+
+export async function anchorPublication(
+  record: Pick<PublicationRecord, "strategy_id" | "version_id" | "creator_near_account" | "network">,
+  commitment: string,
+) {
+  if (PUBLIC_NEAR_NETWORK !== "testnet") throw new Error("Publication evidence is restricted to NEAR testnet.");
+  if (!PUBLIC_NEAR_EVIDENCE_CONTRACT_ID) throw new Error("NEAR publication evidence is not configured yet.");
+  await assertPublicationContractReady();
+  const selector = await getNearSelector();
+  const account = selector.store.getState().accounts?.[0]?.accountId;
+  if (!account || account !== record.creator_near_account) throw new Error("The selected NEAR account does not match the strategy creator.");
+  const wallet = await selector.wallet();
+  if (!wallet.signAndSendTransaction) throw new Error("The selected wallet cannot approve a NEAR testnet transaction.");
+  const outcome = await wallet.signAndSendTransaction({
+    signerId: account,
+    receiverId: PUBLIC_NEAR_EVIDENCE_CONTRACT_ID,
+    actions: [actionCreators.functionCall(
+      "record_publication",
+      { commitment, strategy_id: record.strategy_id, version_id: record.version_id },
+      BigInt("30000000000000"),
+      BigInt(0),
+    )],
+  });
+  if (!outcome || !("transaction" in outcome) || !outcome.transaction?.hash) throw new Error("The wallet did not return a verifiable transaction outcome.");
+  const status = outcome.status as { SuccessValue?: string; Failure?: unknown };
+  if (status.Failure) throw new Error("The NEAR testnet publication transaction failed.");
+  return { transaction_hash: outcome.transaction.hash, receiver: PUBLIC_NEAR_EVIDENCE_CONTRACT_ID, network: "near:testnet" as const, outcome };
 }
