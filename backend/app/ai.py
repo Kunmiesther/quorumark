@@ -152,7 +152,11 @@ def _config() -> tuple[str, str, str, int, float, int, int]:
     if not api_url:
         api_url = "https://cloud-api.near.ai/v1" if provider == "near_ai" else "https://api.openai.com/v1/responses"
     model_name = "NEAR_AI_MODEL" if provider == "near_ai" else "AI_MODEL"
-    model = os.getenv(model_name, "").strip() or os.getenv("AI_MODEL", "").strip()
+    model = os.getenv(model_name, "").strip()
+    if provider == "near_ai":
+        model = model or "google/gemini-2.5-flash-lite"
+    else:
+        model = model or os.getenv("AI_MODEL", "").strip()
     try:
         limit = int(os.getenv("AI_RATE_LIMIT_PER_MINUTE", "").strip() or "10")
         timeout = float(os.getenv("AI_REQUEST_TIMEOUT_SECONDS", "").strip() or "30")
@@ -167,6 +171,26 @@ def _config() -> tuple[str, str, str, int, float, int, int]:
     if not api_key or not model:
         raise AIUnavailableError("AI strategy assistance is unavailable: provider credentials or AI_MODEL are missing")
     return api_key, api_url, model, max(limit, 1), max(timeout, 1.0), max(max_output_tokens, 1), max(max_retries, 0)
+
+
+def configuration_status() -> dict[str, object]:
+    """Return safe AI readiness metadata without exposing provider credentials."""
+    provider = os.getenv("AI_PROVIDER", "disabled").strip().lower() or "disabled"
+    key_name = "NEAR_AI_API_KEY" if provider == "near_ai" else "AI_API_KEY"
+    model_name = "NEAR_AI_MODEL" if provider == "near_ai" else "AI_MODEL"
+    model = os.getenv(model_name, "").strip()
+    if provider == "near_ai":
+        model = model or "google/gemini-2.5-flash-lite"
+    return {
+        "provider": provider,
+        "model": model or None,
+        "credential_configured": bool(os.getenv(key_name, "").strip()),
+        "credential_variable": key_name,
+        "model_variable": model_name,
+        "ready": provider in {"near_ai", "gemini", "openai", "openai_compatible"}
+        and bool(os.getenv(key_name, "").strip())
+        and bool(model),
+    }
 
 
 def _output_text(payload: dict[str, Any]) -> str:

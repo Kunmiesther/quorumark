@@ -23,7 +23,7 @@ services:
       - key: VITE_NEAR_RPC_URL
         value: https://rpc.testnet.near.org
       - key: AI_PROVIDER
-        value: gemini
+        value: near_ai
       - key: AI_API_KEY
         sync: false
       - key: NEAR_AI_API_KEY
@@ -33,7 +33,7 @@ services:
       - key: AI_MODEL
         value: gemini-3.5-flash
       - key: NEAR_AI_MODEL
-        sync: false
+        value: google/gemini-2.5-flash-lite
       - key: AI_API_URL
         value: https://generativelanguage.googleapis.com
       - key: AI_RATE_LIMIT_PER_MINUTE

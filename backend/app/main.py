@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from .ai import AIProviderError, AIUnavailableError, StrategyProposal, analyze_strategy, evaluate_agent, generate_strategy_proposal
+from .ai import AIProviderError, AIUnavailableError, StrategyProposal, analyze_strategy, configuration_status, evaluate_agent, generate_strategy_proposal
 from .historical_data import HistoricalDataError, fetch_historical
 from .engine import run_reference_backtest
 from .models import AIAnalysisRequest, AIAnalysisResponse, AIProposalRequest, AIProposalResponse, AgentEvaluationRequest, AgentEvaluationResponse, BacktestRequest, BacktestResponse, EvidenceDeploymentStatusRequest, HistoricalDataQuery, PaperExecutionRequest, PaperExecutionResponse
@@ -94,8 +94,13 @@ def resolve_near_account(identity: str) -> str | None:
 
 
 @app.get("/health")
-def health() -> dict[str, str | bool]:
-    return {"service": "quorumark-python-engine", "status": "ok", "paper_only": True}
+def health() -> dict[str, object]:
+    return {
+        "service": "quorumark-python-engine",
+        "status": "ok",
+        "paper_only": True,
+        "ai": configuration_status(),
+    }
 
 
 EVIDENCE_DEPLOYMENT_OWNER = "estarkunmi.testnet"

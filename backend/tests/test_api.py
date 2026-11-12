@@ -14,6 +14,31 @@ def test_health_is_paper_only():
     assert response.json()["paper_only"] is True
 
 
+def test_health_reports_sanitized_near_ai_configuration(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "near_ai")
+    monkeypatch.setenv("NEAR_AI_API_KEY", "server-only-test-key")
+    monkeypatch.delenv("NEAR_AI_MODEL", raising=False)
+    body = TestClient(app).get("/health").json()
+    assert body["ai"] == {
+        "provider": "near_ai",
+        "model": "google/gemini-2.5-flash-lite",
+        "credential_configured": True,
+        "credential_variable": "NEAR_AI_API_KEY",
+        "model_variable": "NEAR_AI_MODEL",
+        "ready": True,
+    }
+    assert "test-key" not in str(body)
+
+
+def test_near_ai_does_not_use_gemini_credentials_or_model(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "near_ai")
+    monkeypatch.delenv("NEAR_AI_API_KEY", raising=False)
+    monkeypatch.setenv("AI_API_KEY", "unrelated-gemini-key")
+    monkeypatch.setenv("AI_MODEL", "gemini-3.5-flash")
+    with pytest.raises(ai.AIUnavailableError, match="provider credentials"):
+        ai._config()
+
+
 def test_evidence_deployment_status_requires_authorized_creator(monkeypatch):
     monkeypatch.setenv("QUORUMARK_EVIDENCE_DEPLOYMENT_ENABLED", "true")
     response = TestClient(app).post(
