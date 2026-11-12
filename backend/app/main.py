@@ -317,6 +317,21 @@ def publication_evidence_status(strategy_id: str, version_id: str, identity: str
     return evidence
 
 
+@app.get("/v1/strategies/{strategy_id}/public-evidence")
+def public_publication_evidence(strategy_id: str) -> dict[str, object]:
+    """Expose only verification metadata for a published strategy."""
+    strategy = repository.get_strategy(strategy_id)
+    if not strategy or strategy.get("status") != "published":
+        raise HTTPException(status_code=404, detail="Published strategy not found")
+    version = next((item for item in repository.list_versions(strategy_id) if item.get("version") == strategy.get("current_version")), None)
+    if not version or not version.get("id"):
+        raise HTTPException(status_code=404, detail="Published strategy version not found")
+    evidence = repository.get_publication_evidence(str(version["id"]))
+    if not evidence:
+        return {"status": "pending", "version_id": str(version["id"]), "commitment": None, "transaction_hash": None}
+    return {key: evidence.get(key) for key in ("status", "version_id", "commitment", "transaction_hash", "transaction_receiver", "confirmed_at")}
+
+
 @app.post("/v1/strategies/{strategy_id}/publication-evidence/{version_id}/confirm")
 def confirm_publication_evidence(strategy_id: str, version_id: str, request: PublicationConfirmRequest, identity: str = Depends(require_local_identity)) -> dict[str, object]:
     evidence = repository.get_publication_evidence(version_id)

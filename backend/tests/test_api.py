@@ -327,6 +327,10 @@ def test_publication_evidence_resolves_hosted_wallet_identity(tmp_path: Path, mo
     prepared = client.post(f"/v1/strategies/{strategy_id}/publication-evidence", headers=headers, json={"version": "v1.0"})
     assert prepared.status_code == 201
     assert prepared.json()["creator_near_account"] == "estarkunmi.testnet"
+    public_evidence = client.get(f"/v1/strategies/{strategy_id}/public-evidence")
+    assert public_evidence.status_code == 200
+    assert public_evidence.json()["version_id"] == version.json()["id"]
+    assert "creator_near_account" not in public_evidence.json()
 
 
 def test_publication_confirmation_requires_dedicated_contract_owner(tmp_path: Path, monkeypatch):

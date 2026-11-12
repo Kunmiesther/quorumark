@@ -32,6 +32,7 @@ import { QuorumarkLogo } from "@/components/brand/QuorumarkLogo";
 export type ExchangeView =
   "marketplace" | "detail" | "studio" | "follower" | "subscriptions" | "verification";
 const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+const nearBlocksTransactionUrl = (hash: string) => `https://testnet.nearblocks.io/txns/${encodeURIComponent(hash)}`;
 
 function buildFixtureCandles() {
   const end = Date.now();
@@ -191,6 +192,12 @@ type PreparedPublication = {
   creator_near_account: string;
   network: "near:testnet";
 };
+type PublicEvidence = {
+  status: string;
+  version_id?: string;
+  commitment?: string | null;
+  transaction_hash?: string | null;
+};
 
 export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?: string }) {
   const navigate = useNavigate();
@@ -199,6 +206,7 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
   const [category, setCategory] = useState("All strategies");
   const [providerBusy, setProviderBusy] = useState(false);
   const [ledgerError, setLedgerError] = useState<string | null>(null);
+  const [publicEvidence, setPublicEvidence] = useState<PublicEvidence | null>(null);
   const strategy = state.strategies.find((item) => item.slug === slug) ?? state.strategies[0];
   const update = (next: typeof state) => {
     setState(next);
@@ -216,7 +224,7 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
   }, []);
 
   useEffect(() => {
-    if (view !== "marketplace") return;
+    if (!(["marketplace", "detail", "follower", "subscriptions", "verification"] as ExchangeView[]).includes(view)) return;
     quorumarkApi<BackendStrategyRecord[]>("/v1/strategies")
       .then((records) => {
         const published = records.map((record) => ({
@@ -267,6 +275,37 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
         // Public discovery remains usable with the clearly-labelled illustrative sample.
       });
   }, [view]);
+
+  useEffect(() => {
+    if (!strategy || strategy.sample || !(["detail", "verification"] as ExchangeView[]).includes(view)) return;
+    quorumarkApi<PublicEvidence>(`/v1/strategies/${strategy.id}/public-evidence`)
+      .then(setPublicEvidence)
+      .catch(() => setPublicEvidence(null));
+  }, [strategy?.id, strategy?.sample, view]);
+
+  useEffect(() => {
+    if (!state.wallet || !(["follower", "subscriptions"] as ExchangeView[]).includes(view)) return;
+    Promise.all([
+      quorumarkApi<Array<{ strategy_id: string; status: "active" | "cancelled" | "expired"; id: string }>>("/v1/subscriptions/me"),
+      quorumarkApi<{ capital?: number; max_trade?: number; max_position?: number; max_loss?: number; max_slippage_bps?: number; approved_assets?: string[]; paused?: boolean }>("/v1/follower/policy"),
+    ]).then(([subscriptions, policy]) => {
+      const active = subscriptions.find((item) => item.status === "active");
+      setState((current) => ({
+        ...current,
+        subscription: active ? { strategyId: active.strategy_id, status: "active", receipt: active.id } : undefined,
+        policy: {
+          ...current.policy,
+          capital: policy.capital ?? current.policy.capital,
+          maxTrade: policy.max_trade ?? current.policy.maxTrade,
+          maxPosition: policy.max_position ?? current.policy.maxPosition,
+          maxLoss: policy.max_loss ?? current.policy.maxLoss,
+          maxSlippage: policy.max_slippage_bps ?? current.policy.maxSlippage,
+          approvedAssets: policy.approved_assets ?? current.policy.approvedAssets,
+          paused: policy.paused ?? current.policy.paused,
+        },
+      }));
+    }).catch(() => undefined);
+  }, [state.wallet, view]);
 
   useEffect(() => {
     if (view !== "verification" || !PUBLIC_PYTHON_BACKEND_URL) return;
@@ -479,7 +518,7 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
           onQuery={setQuery}
         />
       )}
-      {view === "detail" && <Detail strategy={strategy} onSubscribe={subscribe} />}
+      {view === "detail" && <Detail strategy={strategy} evidence={publicEvidence} onSubscribe={subscribe} />}
       {view === "studio" && (
         <Studio strategy={strategy} onBack={() => navigate({ to: "/marketplace" })} />
       )}
@@ -494,7 +533,7 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
       )}
       {view === "subscriptions" && <Subscriptions state={state} />}
       {view === "verification" && (
-        <Verification state={state} strategy={strategy} error={ledgerError} />
+        <Verification state={state} strategy={strategy} evidence={publicEvidence} error={ledgerError} />
       )}
     </Shell>
   );
@@ -609,7 +648,7 @@ function Marketplace({
   );
 }
 
-function Detail({ strategy, onSubscribe }: { strategy: Strategy; onSubscribe: () => void }) {
+function Detail({ strategy, evidence, onSubscribe }: { strategy: Strategy; evidence: PublicEvidence | null; onSubscribe: () => void }) {
   const illustrative = strategy.sample;
   return (
     <section>
@@ -679,6 +718,9 @@ function Detail({ strategy, onSubscribe }: { strategy: Strategy; onSubscribe: ()
           <Link to="/verification" className="q-text-link">
             Open verification <ExternalLink size={14} />
           </Link>
+          {evidence?.status === "confirmed" && evidence.transaction_hash && (
+            <p><a className="q-text-link" href={nearBlocksTransactionUrl(evidence.transaction_hash)} target="_blank" rel="noreferrer">View confirmed NEAR transaction <ExternalLink size={14} /></a></p>
+          )}
         </div>
       </div>
     </section>
@@ -1140,7 +1182,7 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
               )}
               {publicationEvidence?.status === "confirmed" && publicationEvidence.transaction_hash && (
                 <div className="q-notice q-notice-success">
-                  <Check size={16} /> NEAR testnet evidence confirmed · {publicationEvidence.transaction_hash}
+                  <Check size={16} /> NEAR testnet evidence confirmed · <a href={nearBlocksTransactionUrl(publicationEvidence.transaction_hash)} target="_blank" rel="noreferrer">{publicationEvidence.transaction_hash}</a> <ExternalLink size={14} />
                 </div>
               )}
             </>
@@ -1306,10 +1348,12 @@ function Subscriptions({ state }: { state: ReturnType<typeof loadExchangeState> 
 function Verification({
   state,
   strategy,
+  evidence,
   error,
 }: {
   state: ReturnType<typeof loadExchangeState>;
   strategy: Strategy;
+  evidence: PublicEvidence | null;
   error: string | null;
 }) {
   const metrics = recomputePerformance(state.executions, state.policy.capital);
@@ -1326,6 +1370,9 @@ function Verification({
         Verification recomputes the ledger and keeps simulation evidence separate from blockchain
         settlement.
       </p>
+      {evidence?.status === "confirmed" && evidence.transaction_hash && (
+        <div className="q-notice q-notice-success"><Check size={16} /> <a href={nearBlocksTransactionUrl(evidence.transaction_hash)} target="_blank" rel="noreferrer">View the confirmed NEAR testnet transaction</a> <ExternalLink size={14} /></div>
+      )}
       <div className="q-verification-grid">
         <div className="q-panel q-ledger-panel">
           <div className="q-card-top">
