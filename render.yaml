@@ -32,6 +32,8 @@ services:
         value: https://cloud-api.near.ai/v1
       - key: AI_MODEL
         value: gemini-3.5-flash
+      - key: NEAR_AI_MODEL
+        sync: false
       - key: AI_API_URL
         value: https://generativelanguage.googleapis.com
       - key: AI_RATE_LIMIT_PER_MINUTE

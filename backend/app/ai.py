@@ -151,7 +151,8 @@ def _config() -> tuple[str, str, str, int, float, int, int]:
     api_url = os.getenv(api_url_name, "").strip()
     if not api_url:
         api_url = "https://cloud-api.near.ai/v1" if provider == "near_ai" else "https://api.openai.com/v1/responses"
-    model = os.getenv("AI_MODEL", "").strip()
+    model_name = "NEAR_AI_MODEL" if provider == "near_ai" else "AI_MODEL"
+    model = os.getenv(model_name, "").strip() or os.getenv("AI_MODEL", "").strip()
     try:
         limit = int(os.getenv("AI_RATE_LIMIT_PER_MINUTE", "").strip() or "10")
         timeout = float(os.getenv("AI_REQUEST_TIMEOUT_SECONDS", "").strip() or "30")

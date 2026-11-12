@@ -121,6 +121,7 @@ def test_near_ai_provider_uses_openai_compatible_chat_response(monkeypatch):
     monkeypatch.setenv("AI_PROVIDER", "near_ai")
     monkeypatch.setenv("NEAR_AI_API_KEY", "server-only-near-test-key")
     monkeypatch.setenv("AI_MODEL", "Qwen/Qwen3.8-27B")
+    monkeypatch.setenv("NEAR_AI_MODEL", "Qwen/Qwen3.8-27B")
     monkeypatch.setenv("AI_API_URL", "https://cloud-api.near.ai/v1")
     calls = []
     monkeypatch.setattr(ai.httpx, "post", lambda *args, **kwargs: (calls.append((args, kwargs)) or FakeResponse()))
@@ -129,6 +130,24 @@ def test_near_ai_provider_uses_openai_compatible_chat_response(monkeypatch):
     assert provenance == {"provider": "near_ai", "model": "Qwen/Qwen3.8-27B"}
     assert calls[0][0][0] == "https://cloud-api.near.ai/v1/chat/completions"
     assert calls[0][1]["headers"]["Authorization"] == "Bearer server-only-near-test-key"
+    assert calls[0][1]["json"]["max_tokens"] == 1200
+    assert calls[0][1]["json"]["response_format"]["type"] == "json_schema"
+
+
+def test_near_ai_model_override_and_blank_limits_use_safe_defaults(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "near_ai")
+    monkeypatch.setenv("NEAR_AI_API_KEY", "server-only-near-test-key")
+    monkeypatch.setenv("AI_MODEL", "z-ai/glm-5.3-flash")
+    monkeypatch.setenv("NEAR_AI_MODEL", "google/gemini-2.5-flash-lite")
+    monkeypatch.setenv("NEAR_AI_API_URL", "https://cloud-api.near.ai/v1")
+    monkeypatch.setenv("AI_RATE_LIMIT_PER_MINUTE", "")
+    monkeypatch.setenv("AI_REQUEST_TIMEOUT_SECONDS", "")
+    monkeypatch.setenv("AI_MAX_OUTPUT_TOKENS", "")
+    monkeypatch.setenv("AI_MAX_RETRIES", "")
+    _, url, model, limit, timeout, max_output_tokens, max_retries = ai._config()
+    assert url == "https://cloud-api.near.ai/v1"
+    assert model == "google/gemini-2.5-flash-lite"
+    assert (limit, timeout, max_output_tokens, max_retries) == (10, 30.0, 1200, 2)
 
 
 @pytest.mark.parametrize(
