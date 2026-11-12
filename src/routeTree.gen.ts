@@ -20,6 +20,7 @@ import { Route as StudioRouteImport } from './routes/studio'
 import { Route as SubscriptionsRouteImport } from './routes/subscriptions'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as VerificationRouteImport } from './routes/verification'
+import { Route as AdminEvidenceDeploymentRouteImport } from './routes/admin.evidence-deployment'
 import { Route as MarketplaceSlugRouteImport } from './routes/marketplace.$slug'
 
 const IndexRoute = IndexRouteImport.update({
@@ -77,6 +78,11 @@ const VerificationRoute = VerificationRouteImport.update({
   path: '/verification',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminEvidenceDeploymentRoute = AdminEvidenceDeploymentRouteImport.update({
+  id: '/admin/evidence-deployment',
+  path: '/admin/evidence-deployment',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MarketplaceSlugRoute = MarketplaceSlugRouteImport.update({
   id: '/$slug',
   path: '/$slug',
@@ -95,6 +101,7 @@ export interface FileRoutesByFullPath {
   '/subscriptions': typeof SubscriptionsRoute
   '/terms': typeof TermsRoute
   '/verification': typeof VerificationRoute
+  '/admin/evidence-deployment': typeof AdminEvidenceDeploymentRoute
   '/marketplace/$slug': typeof MarketplaceSlugRoute
 }
 export interface FileRoutesByTo {
@@ -109,6 +116,7 @@ export interface FileRoutesByTo {
   '/subscriptions': typeof SubscriptionsRoute
   '/terms': typeof TermsRoute
   '/verification': typeof VerificationRoute
+  '/admin/evidence-deployment': typeof AdminEvidenceDeploymentRoute
   '/marketplace/$slug': typeof MarketplaceSlugRoute
 }
 export interface FileRoutesById {
@@ -124,6 +132,7 @@ export interface FileRoutesById {
   '/subscriptions': typeof SubscriptionsRoute
   '/terms': typeof TermsRoute
   '/verification': typeof VerificationRoute
+  '/admin/evidence-deployment': typeof AdminEvidenceDeploymentRoute
   '/marketplace/$slug': typeof MarketplaceSlugRoute
 }
 export interface FileRouteTypes {
@@ -140,6 +149,7 @@ export interface FileRouteTypes {
     | '/subscriptions'
     | '/terms'
     | '/verification'
+    | '/admin/evidence-deployment'
     | '/marketplace/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -154,6 +164,7 @@ export interface FileRouteTypes {
     | '/subscriptions'
     | '/terms'
     | '/verification'
+    | '/admin/evidence-deployment'
     | '/marketplace/$slug'
   id:
     | '__root__'
@@ -168,6 +179,7 @@ export interface FileRouteTypes {
     | '/subscriptions'
     | '/terms'
     | '/verification'
+    | '/admin/evidence-deployment'
     | '/marketplace/$slug'
   fileRoutesById: FileRoutesById
 }
@@ -183,6 +195,7 @@ export interface RootRouteChildren {
   SubscriptionsRoute: typeof SubscriptionsRoute
   TermsRoute: typeof TermsRoute
   VerificationRoute: typeof VerificationRoute
+  AdminEvidenceDeploymentRoute: typeof AdminEvidenceDeploymentRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -264,6 +277,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VerificationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/evidence-deployment': {
+      id: '/admin/evidence-deployment'
+      path: '/admin/evidence-deployment'
+      fullPath: '/admin/evidence-deployment'
+      preLoaderRoute: typeof AdminEvidenceDeploymentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/marketplace/$slug': {
       id: '/marketplace/$slug'
       path: '/$slug'
@@ -298,6 +318,7 @@ const rootRouteChildren: RootRouteChildren = {
   SubscriptionsRoute: SubscriptionsRoute,
   TermsRoute: TermsRoute,
   VerificationRoute: VerificationRoute,
+  AdminEvidenceDeploymentRoute: AdminEvidenceDeploymentRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

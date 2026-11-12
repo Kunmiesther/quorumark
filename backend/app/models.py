@@ -72,6 +72,10 @@ class BacktestRequest(BaseModel):
         return value
 
 
+class EvidenceDeploymentStatusRequest(BaseModel):
+    public_key: str = Field(default="", max_length=200)
+
+
 class Signal(BaseModel):
     timestamp: datetime
     side: Literal["long", "flat"]

@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .ai import AIProviderError, AIUnavailableError, StrategyProposal, analyze_strategy, evaluate_agent, generate_strategy_proposal
 from .historical_data import HistoricalDataError, fetch_historical
 from .engine import run_reference_backtest
-from .models import AIAnalysisRequest, AIAnalysisResponse, AIProposalRequest, AIProposalResponse, AgentEvaluationRequest, AgentEvaluationResponse, BacktestRequest, BacktestResponse, HistoricalDataQuery, PaperExecutionRequest, PaperExecutionResponse
+from .models import AIAnalysisRequest, AIAnalysisResponse, AIProposalRequest, AIProposalResponse, AgentEvaluationRequest, AgentEvaluationResponse, BacktestRequest, BacktestResponse, EvidenceDeploymentStatusRequest, HistoricalDataQuery, PaperExecutionRequest, PaperExecutionResponse
 from .paper import process_paper_signal
 from .contracts import evidence_hash
 from .repository import PaperRepository
@@ -96,6 +96,69 @@ def resolve_near_account(identity: str) -> str | None:
 @app.get("/health")
 def health() -> dict[str, str | bool]:
     return {"service": "quorumark-python-engine", "status": "ok", "paper_only": True}
+
+
+EVIDENCE_DEPLOYMENT_ACCOUNT = "evidence.estarkunmi.testnet"
+EVIDENCE_DEPLOYMENT_OWNER = "estarkunmi.testnet"
+
+
+def _evidence_deployment_enabled() -> bool:
+    return os.getenv("QUORUMARK_EVIDENCE_DEPLOYMENT_ENABLED", "false").lower() == "true"
+
+
+def _near_rpc_query(params: dict[str, object]) -> dict[str, object]:
+    rpc = os.getenv("VITE_NEAR_RPC_URL", "https://rpc.testnet.near.org").strip()
+    response = httpx.post(rpc, json={"jsonrpc": "2.0", "id": "quorumark-evidence-deployment", "method": "query", "params": params}, timeout=20)
+    response.raise_for_status()
+    payload = response.json()
+    if payload.get("error"):
+        return {"error": payload["error"]}
+    return payload.get("result") or {}
+
+
+def _near_view(account_id: str, method_name: str) -> object | None:
+    result = _near_rpc_query({
+        "request_type": "call_function",
+        "finality": "final",
+        "account_id": account_id,
+        "method_name": method_name,
+        "args_base64": base64.b64encode(b"{}").decode(),
+    })
+    if "error" in result or not isinstance(result.get("result"), list):
+        return None
+    try:
+        return json.loads(bytes(result["result"]).decode())
+    except (TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+
+@app.post("/v1/admin/evidence-deployment/status")
+def evidence_deployment_status(request: EvidenceDeploymentStatusRequest, identity: str = Depends(require_local_identity)) -> dict[str, object]:
+    if not _evidence_deployment_enabled():
+        raise HTTPException(status_code=404, detail="Evidence deployment is disabled")
+    if resolve_near_account(identity) != EVIDENCE_DEPLOYMENT_OWNER:
+        raise HTTPException(status_code=403, detail="Only the authorized NEAR creator can use this page")
+    parent = _near_rpc_query({"request_type": "view_account", "finality": "final", "account_id": EVIDENCE_DEPLOYMENT_OWNER})
+    child = _near_rpc_query({"request_type": "view_account", "finality": "final", "account_id": EVIDENCE_DEPLOYMENT_ACCOUNT})
+    child_exists = "error" not in child and bool(child.get("amount"))
+    access_keys: list[dict[str, object]] = []
+    key_result = None
+    if child_exists:
+        key_result = _near_rpc_query({"request_type": "view_access_key_list", "finality": "final", "account_id": EVIDENCE_DEPLOYMENT_ACCOUNT})
+        access_keys = key_result.get("keys", []) if isinstance(key_result, dict) else []
+    key_matches = any(item.get("public_key") == request.public_key and item.get("access_key", {}).get("permission") == "FullAccess" for item in access_keys if isinstance(item, dict))
+    owner = _near_view(EVIDENCE_DEPLOYMENT_ACCOUNT, "owner_id") if child_exists else None
+    return {
+        "authorized_account": EVIDENCE_DEPLOYMENT_OWNER,
+        "child_account": EVIDENCE_DEPLOYMENT_ACCOUNT,
+        "parent_balance_yocto": parent.get("amount") if isinstance(parent, dict) else None,
+        "child_exists": child_exists,
+        "child_balance_yocto": child.get("amount") if child_exists else None,
+        "wallet_full_access_key_matches": key_matches,
+        "code_hash": child.get("code_hash") if child_exists else None,
+        "initialized": owner is not None,
+        "owner_id": owner,
+    }
 
 
 @app.post("/v1/backtests/reference", response_model=BacktestResponse)

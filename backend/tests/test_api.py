@@ -14,6 +14,26 @@ def test_health_is_paper_only():
     assert response.json()["paper_only"] is True
 
 
+def test_evidence_deployment_status_requires_authorized_creator(monkeypatch):
+    monkeypatch.setenv("QUORUMARK_EVIDENCE_DEPLOYMENT_ENABLED", "true")
+    response = TestClient(app).post(
+        "/v1/admin/evidence-deployment/status",
+        headers={"x-quorumark-identity": "near:not-the-owner.testnet"},
+        json={"public_key": "ed25519:unused"},
+    )
+    assert response.status_code == 403
+
+
+def test_evidence_deployment_status_is_disabled_by_default(monkeypatch):
+    monkeypatch.setenv("QUORUMARK_EVIDENCE_DEPLOYMENT_ENABLED", "false")
+    response = TestClient(app).post(
+        "/v1/admin/evidence-deployment/status",
+        headers={"x-quorumark-identity": "near:estarkunmi.testnet"},
+        json={"public_key": "ed25519:unused"},
+    )
+    assert response.status_code == 404
+
+
 def test_browser_auth_preflight_allows_authorization_header():
     response = TestClient(app).options(
         "/v1/ai/strategy-proposals",

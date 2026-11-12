@@ -72,5 +72,7 @@ services:
         value: https://rpc.testnet.near.org
       - key: VITE_NEAR_EVIDENCE_CONTRACT_ID
         value: quorumark-evidence.testnet
+      - key: QUORUMARK_EVIDENCE_DEPLOYMENT_ENABLED
+        value: "true"
       - key: VITE_WALLETCONNECT_PROJECT_ID
         sync: false

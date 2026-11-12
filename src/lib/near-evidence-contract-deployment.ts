@@ -1,4 +1,5 @@
 import { actionCreators } from "@near-wallet-selector/core";
+import type { Action } from "@near-js/transactions";
 import { PublicKey } from "@near-js/crypto";
 
 export const EVIDENCE_CONTRACT_ACCOUNT = "evidence.estarkunmi.testnet";
@@ -9,7 +10,7 @@ export const EVIDENCE_CONTRACT_GAS = "30000000000000";
 export type PreparedNearTransaction = {
   signerId: string;
   receiverId: string;
-  actions: unknown[];
+  actions: Action[];
 };
 
 /**
