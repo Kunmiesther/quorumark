@@ -405,6 +405,17 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
       );
     }
   }
+  async function cancelSubscription() {
+    const subscription = state.subscription;
+    if (!subscription) return;
+    try {
+      await quorumarkApi(`/v1/subscriptions/${subscription.strategyId}/cancel`, { method: "POST" });
+      update({ ...state, subscription: undefined });
+      toast.success("Your practice subscription was cancelled. Your history is preserved.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The subscription could not be cancelled");
+    }
+  }
   async function runSignal() {
     if (!PUBLIC_PYTHON_BACKEND_URL) {
       toast.error("Paper following is not configured");
@@ -531,7 +542,7 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
           onRun={runSignal}
         />
       )}
-      {view === "subscriptions" && <Subscriptions state={state} />}
+      {view === "subscriptions" && <Subscriptions state={state} onCancel={cancelSubscription} />}
       {view === "verification" && (
         <Verification state={state} strategy={strategy} evidence={publicEvidence} error={ledgerError} />
       )}
@@ -1313,7 +1324,7 @@ function Follower({
   );
 }
 
-function Subscriptions({ state }: { state: ReturnType<typeof loadExchangeState> }) {
+function Subscriptions({ state, onCancel }: { state: ReturnType<typeof loadExchangeState>; onCancel: () => void }) {
   return (
     <section>
       <p className="q-kicker">Your access</p>
@@ -1332,9 +1343,12 @@ function Subscriptions({ state }: { state: ReturnType<typeof loadExchangeState> 
           </p>
         </div>
         {state.subscription ? (
-          <Link className="q-primary" to="/follower">
-            Open Follower Desk <ArrowRight size={16} />
-          </Link>
+          <div className="q-studio-actions">
+            <Link className="q-primary" to="/follower">
+              Open Follower Desk <ArrowRight size={16} />
+            </Link>
+            <button className="q-secondary" onClick={onCancel}>Cancel subscription</button>
+          </div>
         ) : (
           <Link className="q-primary" to="/marketplace">
             Explore strategies <ArrowRight size={16} />
