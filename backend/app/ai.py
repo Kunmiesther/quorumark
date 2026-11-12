@@ -144,20 +144,28 @@ class _RateGate:
 _rate_gate = _RateGate()
 
 
-def _config() -> tuple[str, str, str, int, float]:
+def _config() -> tuple[str, str, str, int, float, int, int]:
     provider = os.getenv("AI_PROVIDER", "disabled").strip().lower()
     api_key = os.getenv("NEAR_AI_API_KEY", "").strip() if provider == "near_ai" else os.getenv("AI_API_KEY", "").strip()
-    api_url = os.getenv("AI_API_URL", "https://api.openai.com/v1/responses").strip()
+    api_url_name = "NEAR_AI_API_URL" if provider == "near_ai" else "AI_API_URL"
+    api_url = os.getenv(api_url_name, "").strip()
+    if not api_url:
+        api_url = "https://cloud-api.near.ai/v1" if provider == "near_ai" else "https://api.openai.com/v1/responses"
     model = os.getenv("AI_MODEL", "").strip()
-    limit = int(os.getenv("AI_RATE_LIMIT_PER_MINUTE", "10"))
-    timeout = float(os.getenv("AI_REQUEST_TIMEOUT_SECONDS", "30"))
+    try:
+        limit = int(os.getenv("AI_RATE_LIMIT_PER_MINUTE", "").strip() or "10")
+        timeout = float(os.getenv("AI_REQUEST_TIMEOUT_SECONDS", "").strip() or "30")
+        max_output_tokens = int(os.getenv("AI_MAX_OUTPUT_TOKENS", "").strip() or "1200")
+        max_retries = int(os.getenv("AI_MAX_RETRIES", "").strip() or "2")
+    except ValueError as error:
+        raise AIUnavailableError("AI strategy assistance has invalid server configuration") from error
     if provider in {"", "disabled"}:
         raise AIUnavailableError("AI strategy assistance is unavailable: AI_PROVIDER is disabled")
     if provider not in {"openai", "openai_compatible", "near_ai", "gemini"}:
         raise AIUnavailableError(f"AI strategy assistance is unavailable: unsupported provider '{provider}'")
     if not api_key or not model:
         raise AIUnavailableError("AI strategy assistance is unavailable: provider credentials or AI_MODEL are missing")
-    return api_key, api_url, model, max(limit, 1), max(timeout, 1.0)
+    return api_key, api_url, model, max(limit, 1), max(timeout, 1.0), max(max_output_tokens, 1), max(max_retries, 0)
 
 
 def _output_text(payload: dict[str, Any]) -> str:
@@ -207,14 +215,14 @@ def _gemini_output_text(payload: dict[str, Any]) -> str:
 
 
 def _request(schema_name: str, schema: dict[str, Any], instruction: str) -> tuple[dict[str, Any], dict[str, str]]:
-    api_key, api_url, model, limit, timeout = _config()
+    api_key, api_url, model, limit, timeout, max_output_tokens, max_retries = _config()
     _rate_gate.check(limit)
     provider = os.getenv("AI_PROVIDER", "").strip().lower()
     if provider == "gemini":
         body = {
             "systemInstruction": {"parts": [{"text": "You are a careful financial research assistant. Return only the requested JSON object. Never emit executable code. Separate observed facts, calculated metrics, and suggestions."}]},
             "contents": [{"role": "user", "parts": [{"text": instruction}]}],
-            "generationConfig": {"responseMimeType": "application/json", "responseSchema": _gemini_schema(schema), "temperature": 0.2},
+            "generationConfig": {"responseMimeType": "application/json", "responseSchema": _gemini_schema(schema), "temperature": 0.2, "maxOutputTokens": max_output_tokens},
         }
         url = api_url.rstrip("/") + f"/v1beta/models/{model}:generateContent" if "/models/" not in api_url else api_url
         headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
@@ -226,6 +234,11 @@ def _request(schema_name: str, schema: dict[str, Any], instruction: str) -> tupl
                 {"role": "user", "content": instruction},
             ],
             "temperature": 0.2,
+            "max_tokens": max_output_tokens,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": schema_name, "strict": True, "schema": schema},
+            },
         }
         url = api_url.rstrip("/") + "/chat/completions" if "/chat/completions" not in api_url else api_url
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -234,20 +247,21 @@ def _request(schema_name: str, schema: dict[str, Any], instruction: str) -> tupl
             "model": model,
             "input": [{"role": "system", "content": "You are a careful financial research assistant. Return only the requested JSON object. Never emit executable code. Separate observed facts, calculated metrics, and suggestions."}, {"role": "user", "content": instruction}],
             "text": {"format": {"type": "json_schema", "name": schema_name, "strict": True, "schema": schema}},
+            "max_output_tokens": max_output_tokens,
         }
         url = api_url
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     response = None
-    for attempt in range(3):
+    for attempt in range(max_retries + 1):
         try:
             response = httpx.post(url, headers=headers, json=body, timeout=timeout)
         except httpx.HTTPError as error:
             logger.warning("AI provider network failure provider=%s model=%s error_type=%s", provider, model, type(error).__name__)
-            if attempt == 2:
+            if attempt == max_retries:
                 raise AIUnavailableError("AI provider could not be reached. Try again shortly.") from error
             time.sleep(0.5 * (attempt + 1))
             continue
-        if response.status_code < 500 or attempt == 2:
+        if response.status_code < 500 or attempt == max_retries:
             break
         time.sleep(0.5 * (attempt + 1))
     assert response is not None

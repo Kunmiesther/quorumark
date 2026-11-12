@@ -90,6 +90,24 @@ testnet-only evidence explanation. A real wallet signature and any contract
 deployment must be approved by the wallet owner; browser automation covers
 the UI and rejection paths but does not approve wallet prompts.
 
+## Live judge links and demo plan
+
+- Web application: https://quorumark-web.onrender.com
+- Python service health: https://quorumark-api.onrender.com/health
+- Evidence contract: `quorumark-evidence.testnet`
+
+For a two-to-three minute demonstration: open the landing page and Marketplace;
+enter Strategy Studio and describe a cautious Bitcoin method; show the AI
+proposal and its plain-English explanation; run the clearly labelled sample-data
+test; save and publish a version; open the Marketplace record; then switch to
+Follower Desk to set an independent paper-risk policy and inspect the decision
+history. Finish by showing the Verification page and, only with the creator's
+explicit wallet approval, the NEAR testnet publication transaction preview.
+
+Screenshots used for the release walkthrough are in `artifacts/screenshots/`.
+They document the interface only and are not evidence of a completed wallet
+signature, AI provider call, historical return, or blockchain transaction.
+
 The release intentionally excludes live trading, real-money settlement,
 custody, recovery phrases, cross-chain settlement claims, and unsupported AI
 autonomy. The publication-evidence contract is deployed at
@@ -143,8 +161,11 @@ in the dashboard. Set `VITE_PYTHON_BACKEND_URL` to the final HTTPS API URL and
 `QUORUMARK_ALLOWED_ORIGINS` to the final HTTPS frontend URL before testing.
 
 Required server-only deployment values are `QUORUMARK_SUPABASE_SECRET_KEY`,
-`QUORUMARK_SESSION_SECRET`, and `AI_API_KEY`. Required public values include
-the Supabase URL and publishable key. Never put the server-only values in a
+`QUORUMARK_SESSION_SECRET`, and either `AI_API_KEY` for Gemini or
+`NEAR_AI_API_KEY` for NEAR AI. When using NEAR AI, set `AI_PROVIDER=near_ai`,
+`AI_MODEL` to a model returned by its catalog, and keep
+`NEAR_AI_API_URL=https://cloud-api.near.ai/v1`. Required public values include
+the Supabase URL and publishable key. Never put server-only values in a
 `VITE_*` variable or commit them.
 
 The Python service also owns follower paper decisions at `POST /v1/paper/executions`. It validates candle chronology and freshness, evaluates the follower's independent limits, applies paper fees and slippage, records an idempotency key, and returns a `paper_traded` evidence hash. The endpoint never calls a broker or signer.
