@@ -51,3 +51,39 @@ impl PublicationEvidence {
 
     pub fn owner_id(&self) -> AccountId { self.owner_id.clone() }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use near_sdk::{testing_env, test_utils::VMContextBuilder, AccountId};
+
+    fn context(account: &str) {
+        testing_env!(VMContextBuilder::new()
+            .signer_account_id(account.parse::<AccountId>().unwrap())
+            .predecessor_account_id(account.parse::<AccountId>().unwrap())
+            .build());
+    }
+
+    #[test]
+    fn initialized_contract_records_and_replays_same_publication() {
+        context("creator.testnet");
+        let mut contract = PublicationEvidence::new("quorumark-evidence.testnet".parse().unwrap());
+        assert_eq!(contract.owner_id().as_str(), "quorumark-evidence.testnet");
+
+        contract.record_publication("a".repeat(64), "strategy", "version");
+        contract.record_publication("a".repeat(64), "strategy", "version");
+
+        let publication = contract.get_publication("strategy".to_string(), "version".to_string()).unwrap();
+        assert_eq!(publication.creator.as_str(), "creator.testnet");
+        assert_eq!(publication.commitment, "a".repeat(64));
+    }
+
+    #[test]
+    #[should_panic(expected = "Publication commitment cannot change")]
+    fn publication_commitment_cannot_change() {
+        context("creator.testnet");
+        let mut contract = PublicationEvidence::new("quorumark-evidence.testnet".parse().unwrap());
+        contract.record_publication("a".repeat(64), "strategy", "version");
+        contract.record_publication("b".repeat(64), "strategy", "version");
+    }
+}

@@ -9,14 +9,20 @@ import "@near-wallet-selector/modal-ui/styles.css";
 let selectorPromise: Promise<WalletSelector> | undefined;
 let modal: ReturnType<typeof setupModal> | undefined;
 
+function quorumarkIconUrl() {
+  return typeof window === "undefined"
+    ? "https://quorumark-web.onrender.com/favicon.svg"
+    : `${window.location.origin}/favicon.svg`;
+}
+
 export async function getNearSelector(): Promise<WalletSelector> {
   if (!selectorPromise) {
     selectorPromise = setupWalletSelector({
       network: "testnet",
       optimizeWalletOrder: true,
       modules: [
-        setupMeteorWallet(),
-        setupMyNearWallet({ walletUrl: "https://testnet.mynearwallet.com" }),
+        setupMeteorWallet({ iconUrl: quorumarkIconUrl() }),
+        setupMyNearWallet({ walletUrl: "https://testnet.mynearwallet.com", iconUrl: quorumarkIconUrl() }),
       ],
     });
   }
@@ -28,7 +34,6 @@ export async function showNearWalletSelector(): Promise<string> {
   const current = selector.store.getState().accounts?.[0]?.accountId;
   if (current) return current;
   modal ??= setupModal(selector, {
-    contractId: "quorumark.testnet",
     theme: "dark",
     description: "Choose a NEAR wallet to authenticate with Quorumark.",
   });

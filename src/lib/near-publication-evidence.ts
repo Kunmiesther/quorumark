@@ -1,4 +1,4 @@
-import { PUBLIC_NEAR_EVIDENCE_CONTRACT_ID, PUBLIC_NEAR_NETWORK } from "@/lib/public-env";
+import { PUBLIC_NEAR_EVIDENCE_CONTRACT_ID, PUBLIC_NEAR_NETWORK, PUBLIC_NEAR_RPC_URL } from "@/lib/public-env";
 import { actionCreators } from "@near-wallet-selector/core";
 import { getNearSelector } from "@/lib/wallet/near";
 
@@ -30,9 +30,35 @@ export async function publicationCommitment(record: PublicationRecord): Promise<
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+export async function assertPublicationContractReady(): Promise<void> {
+  if (!PUBLIC_NEAR_EVIDENCE_CONTRACT_ID) throw new Error("NEAR publication evidence is not configured yet.");
+  const args_base64 = btoa("{}");
+  const response = await fetch(PUBLIC_NEAR_RPC_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "quorumark-publication-preflight",
+      method: "query",
+      params: {
+        request_type: "call_function",
+        finality: "final",
+        account_id: PUBLIC_NEAR_EVIDENCE_CONTRACT_ID,
+        method_name: "owner_id",
+        args_base64,
+      },
+    }),
+  });
+  const payload = await response.json().catch(() => null) as { result?: { result?: number[]; error?: string }; error?: unknown } | null;
+  if (!response.ok || payload?.error || payload?.result?.error || !payload?.result?.result) {
+    throw new Error("NEAR publication evidence is not ready yet. The testnet contract must be initialized before approval.");
+  }
+}
+
 export async function anchorPublication(record: Pick<PublicationRecord, "strategy_id" | "version_id" | "creator_near_account" | "network">, commitment: string) {
   if (PUBLIC_NEAR_NETWORK !== "testnet") throw new Error("Publication evidence is restricted to NEAR testnet.");
   if (!PUBLIC_NEAR_EVIDENCE_CONTRACT_ID) throw new Error("NEAR publication evidence is not configured yet.");
+  await assertPublicationContractReady();
   const selector = await getNearSelector();
   const account = selector.store.getState().accounts?.[0]?.accountId;
   if (!account || account !== record.creator_near_account) throw new Error("The selected NEAR account does not match the publication creator.");
