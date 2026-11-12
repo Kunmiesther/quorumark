@@ -107,6 +107,11 @@ EVIDENCE_DEPLOYMENT_OWNER = "estarkunmi.testnet"
 EVIDENCE_DEPLOYMENT_ACCOUNT = EVIDENCE_DEPLOYMENT_OWNER
 
 
+def evidence_contract_owner() -> str:
+    """Return the signer authorized by the deployed owner-only evidence contract."""
+    return os.getenv("QUORUMARK_NEAR_EVIDENCE_OWNER_ID", "quorumark-evidence-dedicated.testnet").strip()
+
+
 def _evidence_deployment_enabled() -> bool:
     return os.getenv("QUORUMARK_EVIDENCE_DEPLOYMENT_ENABLED", "false").lower() == "true"
 
@@ -288,6 +293,17 @@ def prepare_publication_evidence(strategy_id: str, request: PublicationPrepareRe
     return repository.save_publication_evidence(existing or record)
 
 
+@app.get("/v1/strategies/{strategy_id}/publication-evidence/{version_id}")
+def publication_evidence_status(strategy_id: str, version_id: str, identity: str = Depends(require_local_identity)) -> dict[str, object]:
+    strategy = repository.get_strategy(strategy_id)
+    if not strategy or strategy.get("creator_id") != identity:
+        raise HTTPException(status_code=404, detail="Published strategy not found")
+    evidence = repository.get_publication_evidence(version_id)
+    if not evidence or evidence.get("strategy_id") != strategy_id:
+        raise HTTPException(status_code=404, detail="Publication evidence has not been prepared")
+    return evidence
+
+
 @app.post("/v1/strategies/{strategy_id}/publication-evidence/{version_id}/confirm")
 def confirm_publication_evidence(strategy_id: str, version_id: str, request: PublicationConfirmRequest, identity: str = Depends(require_local_identity)) -> dict[str, object]:
     evidence = repository.get_publication_evidence(version_id)
@@ -295,15 +311,20 @@ def confirm_publication_evidence(strategy_id: str, version_id: str, request: Pub
     account = resolve_near_account(identity)
     if not evidence or evidence.get("strategy_id") != strategy_id or not account or evidence.get("creator_near_account") != account:
         raise HTTPException(status_code=404, detail="Publication evidence request not found")
+    if evidence.get("status") == "confirmed":
+        if evidence.get("transaction_hash") == request.transaction_hash:
+            return evidence
+        raise HTTPException(status_code=409, detail="This publication already has confirmed evidence")
     if not contract_id or evidence.get("network") != "near:testnet":
         raise HTTPException(status_code=503, detail="NEAR testnet evidence contract is not configured")
+    owner_id = evidence_contract_owner()
     rpc = os.getenv("VITE_NEAR_RPC_URL", "https://rpc.testnet.near.org").strip()
     try:
-        response = httpx.post(rpc, json={"jsonrpc": "2.0", "id": "quorumark-evidence", "method": "tx", "params": [request.transaction_hash, evidence["creator_near_account"]]}, timeout=20)
+        response = httpx.post(rpc, json={"jsonrpc": "2.0", "id": "quorumark-evidence", "method": "tx", "params": [request.transaction_hash, owner_id]}, timeout=20)
         payload = response.json()
         result = payload.get("result") or {}
         transaction = result.get("transaction") or {}
-        if payload.get("error") or transaction.get("signer_id") != evidence["creator_near_account"] or transaction.get("receiver_id") != contract_id:
+        if payload.get("error") or transaction.get("signer_id") != owner_id or transaction.get("receiver_id") != contract_id:
             raise ValueError("Transaction signer or receiver does not match publication evidence")
         status = result.get("status") or {}
         if "SuccessValue" not in status:

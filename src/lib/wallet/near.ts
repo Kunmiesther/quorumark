@@ -11,8 +11,8 @@ let modal: ReturnType<typeof setupModal> | undefined;
 
 function quorumarkIconUrl() {
   return typeof window === "undefined"
-    ? "https://quorumark-web.onrender.com/favicon.svg"
-    : `${window.location.origin}/favicon.svg`;
+    ? "https://quorumark-web.onrender.com/quorumark-mark.svg?v=2"
+    : `${window.location.origin}/quorumark-mark.svg?v=2`;
 }
 
 export async function getNearSelector(): Promise<WalletSelector> {

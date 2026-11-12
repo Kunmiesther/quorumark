@@ -1,3 +1,5 @@
+import base64
+import json
 from fastapi.testclient import TestClient
 import pytest
 from pathlib import Path
@@ -289,3 +291,42 @@ def test_publication_evidence_resolves_hosted_wallet_identity(tmp_path: Path, mo
     prepared = client.post(f"/v1/strategies/{strategy_id}/publication-evidence", headers=headers, json={"version": "v1.0"})
     assert prepared.status_code == 201
     assert prepared.json()["creator_near_account"] == "estarkunmi.testnet"
+
+
+def test_publication_confirmation_requires_dedicated_contract_owner(tmp_path: Path, monkeypatch):
+    repository = PaperRepository(str(tmp_path / "publication-owner.db"))
+    monkeypatch.setattr(main, "repository", repository)
+    monkeypatch.setenv("QUORUMARK_NEAR_EVIDENCE_CONTRACT_ID", "quorumark-evidence-dedicated.testnet")
+    monkeypatch.setenv("QUORUMARK_NEAR_EVIDENCE_OWNER_ID", "quorumark-evidence-dedicated.testnet")
+    user_id = "creator-user"
+    monkeypatch.setattr(main, "resolve_near_account", lambda identity: "estarkunmi.testnet" if identity == user_id else None)
+    client = TestClient(app)
+    headers = {"x-quorumark-identity": user_id}
+    created = client.post("/v1/strategies", headers=headers, json={
+        "name": "Owner signer test",
+        "thesis": "A publication authorization regression test strategy.",
+        "market": "Crypto spot",
+        "supported_assets": ["BTCUSDT"],
+        "risk_class": "low",
+        "definition": {},
+    })
+    strategy_id = created.json()["id"]
+    version = client.post(f"/v1/strategies/{strategy_id}/versions", headers=headers, json={"version": "v1.0", "definition": {}})
+    version_id = version.json()["id"]
+    client.post(f"/v1/strategies/{strategy_id}/publish", headers=headers)
+    prepared = client.post(f"/v1/strategies/{strategy_id}/publication-evidence", headers=headers, json={"version": "v1.0"}).json()
+    tx_hash = "A" * 44
+
+    class RpcResponse:
+        def json(self):
+            args = base64.b64encode(json.dumps({"commitment": prepared["commitment"], "strategy_id": strategy_id, "version_id": version_id}).encode()).decode()
+            return {"result": {"transaction": {"signer_id": "quorumark-evidence-dedicated.testnet", "receiver_id": "quorumark-evidence-dedicated.testnet", "actions": [{"FunctionCall": {"args": args}}]}, "status": {"SuccessValue": ""}}}
+
+    def fake_post(url, **kwargs):
+        assert kwargs["json"]["params"][1] == "quorumark-evidence-dedicated.testnet"
+        return RpcResponse()
+
+    monkeypatch.setattr(main.httpx, "post", fake_post)
+    confirmed = client.post(f"/v1/strategies/{strategy_id}/publication-evidence/{version_id}/confirm", headers=headers, json={"transaction_hash": tx_hash})
+    assert confirmed.status_code == 200
+    assert confirmed.json()["status"] == "confirmed"

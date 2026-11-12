@@ -83,6 +83,14 @@ Wallet Selector handles testnet authentication, and the narrow Rust contract
 stores only an immutable publication commitment—not strategy parameters or
 private logic.
 
+Hosted publication and blockchain evidence are intentionally separate. A
+creator's wallet publishes the version to the marketplace; it never signs the
+owner-only `record_publication` contract call. The dedicated contract owner
+records pending commitments through the authorized operational signer, and the
+backend marks a version verified only after NEAR RPC confirms the signer,
+receiver, method arguments, and final receipt. Until then the product displays
+"verification pending" rather than opening an unauthorized wallet prompt.
+
 For a credential-safe demo, use the public landing page, inspect the sample in
 Marketplace, run the Studio simulation, open Follower to apply risk controls,
 open Verification to recompute the ledger, then show Connect Wallet and the

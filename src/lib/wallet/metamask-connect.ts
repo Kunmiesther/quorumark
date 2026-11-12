@@ -22,7 +22,7 @@ async function getClient(): Promise<MetaMaskClient> {
             name: "Quorumark Strategy Exchange",
             url:
               typeof window === "undefined" ? "https://quorumark.example" : window.location.origin,
-            iconUrl: typeof window === "undefined" ? undefined : `${window.location.origin}/favicon.svg`,
+            iconUrl: typeof window === "undefined" ? undefined : `${window.location.origin}/quorumark-mark.svg?v=2`,
           },
           api: {
             supportedNetworks: {

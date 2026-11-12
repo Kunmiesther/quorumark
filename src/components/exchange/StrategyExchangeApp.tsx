@@ -710,7 +710,7 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
   const [savedVersion, setSavedVersion] = useState(publicationDraft.version ?? "v1.0");
   const [published, setPublished] = useState(Boolean(publicationDraft.published));
   const [anchoring, setAnchoring] = useState(false);
-  const [publicationEvidence, setPublicationEvidence] = useState<{ status: string; transaction_hash?: string } | null>(null);
+  const [publicationEvidence, setPublicationEvidence] = useState<{ status: string; transaction_hash?: string; commitment?: string; version_id?: string } | null>(null);
   const [preparedPublication, setPreparedPublication] = useState<PreparedPublication | null>(null);
   const [publishing, setPublishing] = useState(false);
   useEffect(() => {
@@ -719,6 +719,12 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
   useEffect(() => {
     window.sessionStorage.setItem("quorumark.studio.publication", JSON.stringify({ strategyId: savedStrategyId, versionId: savedVersionId, version: savedVersion, published }));
   }, [savedStrategyId, savedVersionId, savedVersion, published]);
+  useEffect(() => {
+    if (!published || !savedStrategyId || !savedVersionId || !getWalletSession()) return;
+    quorumarkApi<{ status: string; transaction_hash?: string; commitment?: string; version_id?: string }>(
+      `/v1/strategies/${savedStrategyId}/publication-evidence/${savedVersionId}`,
+    ).then(setPublicationEvidence).catch(() => undefined);
+  }, [published, savedStrategyId, savedVersionId]);
   async function generateProposal(instruction = prompt) {
     const wallet = getWalletSession();
     if (!wallet) {
@@ -904,31 +910,10 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
         { method: "POST", body: JSON.stringify({ version: savedVersion }) },
       );
       setPreparedPublication(prepared);
+      setPublicationEvidence({ ...prepared, status: "pending" });
       toast.success("Verification details are ready for your review");
     } catch (anchorError) {
       setError(anchorError instanceof Error ? anchorError.message : "NEAR testnet evidence could not be confirmed");
-    } finally {
-      setAnchoring(false);
-    }
-  }
-  async function approvePreparedPublication() {
-    if (!savedStrategyId || !preparedPublication) return;
-    setAnchoring(true);
-    setError(null);
-    try {
-      const { ensureBrowserPolyfills } = await import("@/lib/browser-polyfills");
-      await ensureBrowserPolyfills();
-      const { anchorPublication } = await import("@/lib/near-publication-evidence");
-      const submitted = await anchorPublication({ strategy_id: savedStrategyId, version_id: preparedPublication.version_id, creator_near_account: preparedPublication.creator_near_account, network: preparedPublication.network }, preparedPublication.commitment);
-      const confirmed = await quorumarkApi<{ status: string; transaction_hash?: string }>(
-        `/v1/strategies/${savedStrategyId}/publication-evidence/${preparedPublication.version_id}/confirm`,
-        { method: "POST", body: JSON.stringify({ transaction_hash: submitted.transaction_hash }) },
-      );
-      setPublicationEvidence(confirmed);
-      setPreparedPublication(null);
-      toast.success("NEAR testnet verification confirmed");
-    } catch (anchorError) {
-      setError(anchorError instanceof Error ? anchorError.message : "NEAR testnet verification could not be completed");
     } finally {
       setAnchoring(false);
     }
@@ -1098,27 +1083,31 @@ function Studio({ strategy, onBack }: { strategy: Strategy; onBack: () => void }
               {published && !publicationEvidence && (
                 <div className="q-notice">
                   <ShieldCheck size={16} />
-                  <span>Hosted publication is complete. Review the details before recording this version on NEAR testnet.</span>
+                  <span>Hosted publication is complete. You can prepare its independent NEAR testnet verification.</span>
                   <button className="q-secondary" onClick={preparePublishedVersion} disabled={anchoring}>
-                    {anchoring ? "Preparing verification..." : "Prepare strategy verification"}
+                    {anchoring ? "Preparing verification..." : "Prepare verification"}
                   </button>
                 </div>
               )}
-              {preparedPublication && !publicationEvidence && (
+              {preparedPublication && publicationEvidence?.status === "pending" && (
                 <div className="q-notice q-ai-proposal">
                   <ShieldCheck size={16} />
                   <div>
-                    <strong>Review before opening your wallet</strong>
+                    <strong>NEAR verification is pending</strong>
                     <p>Network: NEAR testnet · Receiver: {PUBLIC_NEAR_EVIDENCE_CONTRACT_ID}</p>
                     <p>Method: record_publication · Deposit: 0 NEAR · Expected fee: up to 0.00003 NEAR in gas</p>
                     <p>Commitment: <code>{preparedPublication.commitment}</code></p>
                     <p>Strategy ID: <code>{savedStrategyId}</code> · Version ID: <code>{preparedPublication.version_id}</code></p>
-                    <small>This records the exact published version commitment. It does not prove profitability or market-data accuracy.</small>
-                    <button className="q-primary" onClick={approvePreparedPublication} disabled={anchoring}>{anchoring ? "Waiting for wallet..." : "Approve in Meteor Wallet"}</button>
+                    <small>This evidence records the exact published version. It does not prove profitability or market-data accuracy.</small>
+                    <details>
+                      <summary>View verification details</summary>
+                      <p>Transaction method: record_publication · Deposit: 0 NEAR · Gas: 30 Tgas</p>
+                      <p>Strategy ID: <code>{savedStrategyId}</code> · Version ID: <code>{preparedPublication.version_id}</code></p>
+                    </details>
                   </div>
                 </div>
               )}
-              {publicationEvidence?.transaction_hash && (
+              {publicationEvidence?.status === "confirmed" && publicationEvidence.transaction_hash && (
                 <div className="q-notice q-notice-success">
                   <Check size={16} /> NEAR testnet evidence confirmed · {publicationEvidence.transaction_hash}
                 </div>

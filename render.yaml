@@ -20,6 +20,8 @@ services:
         sync: false
       - key: QUORUMARK_NEAR_EVIDENCE_CONTRACT_ID
         value: quorumark-evidence-dedicated.testnet
+      - key: QUORUMARK_NEAR_EVIDENCE_OWNER_ID
+        value: quorumark-evidence-dedicated.testnet
       - key: VITE_NEAR_RPC_URL
         value: https://rpc.testnet.near.org
       - key: AI_PROVIDER

@@ -203,8 +203,9 @@ class PaperRepository:
 
     def update_publication_evidence(self, version_id: str, **changes: Any) -> dict[str, Any] | None:
         assignments = ", ".join(f"{key} = ?" for key in changes)
+        values = [json.dumps(value, sort_keys=True) if key == "receipt" and value is not None else value for key, value in changes.items()]
         with self._connect() as db:
-            db.execute(f"update publication_evidence set {assignments} where version_id = ?", [*changes.values(), version_id])
+            db.execute(f"update publication_evidence set {assignments} where version_id = ?", [*values, version_id])
         return self.get_publication_evidence(version_id)
 
     def save_subscription(self, strategy_id: str, follower_id: str, environment: str) -> dict[str, Any]:
