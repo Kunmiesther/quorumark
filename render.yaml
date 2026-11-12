@@ -73,6 +73,6 @@ services:
       - key: VITE_NEAR_EVIDENCE_CONTRACT_ID
         value: quorumark-evidence.testnet
       - key: QUORUMARK_EVIDENCE_DEPLOYMENT_ENABLED
-        value: "true"
+        value: "false"
       - key: VITE_WALLETCONNECT_PROJECT_ID
         sync: false
