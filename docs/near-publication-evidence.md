@@ -13,6 +13,13 @@ dedicated NEAR testnet account, initialize it, and configure both
 `QUORUMARK_NEAR_EVIDENCE_CONTRACT_ID`. Never use a mainnet contract or store
 strategy parameters on-chain.
 
+The verified testnet contract is `quorumark-evidence-dedicated.testnet`. It is
+owner-controlled by that dedicated contract account. Deployment and
+initialization were confirmed in transaction
+`CeFAFZv19R9nUPrKWTdX5MVZ6M8kQTencHHNNeUEsfNY`; the existing Quorumark
+strategy publication was confirmed in transaction
+`FJcHvD37RmFdoaJkiUmKAc1Pyj54X6L2ZPbJUE6427NC`.
+
 Without that deployed contract, Quorumark deliberately reports evidence as
 unavailable; it never invents a transaction hash or treats a local digest as
 on-chain proof.
