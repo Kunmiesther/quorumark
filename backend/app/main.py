@@ -290,7 +290,13 @@ def prepare_publication_evidence(strategy_id: str, request: PublicationPrepareRe
     existing = repository.get_publication_evidence(str(version["id"]))
     if existing and existing.get("commitment") != record["commitment"]:
         raise HTTPException(status_code=409, detail="Publication evidence commitment is immutable")
-    return repository.save_publication_evidence(existing or record)
+    saved = repository.save_publication_evidence(existing or record)
+    if saved.get("status") == "pending":
+        try:
+            repository.enqueue_publication_job(strategy_id, str(version["id"]), saved["commitment"])
+        except Exception as error:
+            logger.error("Publication evidence saved but durable queue unavailable error_type=%s", type(error).__name__)
+    return saved
 
 
 @app.get("/v1/strategies/{strategy_id}/publication-evidence/{version_id}")

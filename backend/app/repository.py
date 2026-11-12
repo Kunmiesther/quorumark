@@ -69,6 +69,12 @@ class PaperRepository:
                 network text not null, status text not null, transaction_hash text, transaction_receiver text,
                 block_height integer, receipt text, requested_at text not null, confirmed_at text
               );
+              create table if not exists publication_jobs (
+                id text primary key, strategy_id text not null, version_id text not null unique,
+                commitment text not null, status text not null, attempts integer not null default 0,
+                next_attempt_at text not null, last_error text, transaction_hash text,
+                locked_at text, created_at text not null, updated_at text not null
+              );
               create table if not exists ai_evaluations (
                 id text primary key, kind text not null, provider text not null,
                 model text not null, actor_id text not null, input text not null,
@@ -207,6 +213,21 @@ class PaperRepository:
         with self._connect() as db:
             db.execute(f"update publication_evidence set {assignments} where version_id = ?", [*values, version_id])
         return self.get_publication_evidence(version_id)
+
+    def enqueue_publication_job(self, strategy_id: str, version_id: str, commitment: str) -> dict[str, Any]:
+        now = utc_now()
+        record = {
+            "id": "pubjob_" + uuid.uuid4().hex[:20], "strategy_id": strategy_id,
+            "version_id": version_id, "commitment": commitment, "status": "pending",
+            "attempts": 0, "next_attempt_at": now, "last_error": None,
+            "transaction_hash": None, "locked_at": None, "created_at": now, "updated_at": now,
+        }
+        with self._connect() as db:
+            existing = db.execute("select * from publication_jobs where version_id = ?", (version_id,)).fetchone()
+            if existing:
+                return dict(existing)
+            db.execute("insert into publication_jobs values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", tuple(record.values()))
+        return record
 
     def save_subscription(self, strategy_id: str, follower_id: str, environment: str) -> dict[str, Any]:
         record = {"id": "sub_" + uuid.uuid4().hex[:20], "strategy_id": strategy_id, "follower_id": follower_id, "status": "active", "environment": environment, "created_at": utc_now(), "cancelled_at": None}

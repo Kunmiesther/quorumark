@@ -291,6 +291,10 @@ def test_publication_evidence_resolves_hosted_wallet_identity(tmp_path: Path, mo
     prepared = client.post(f"/v1/strategies/{strategy_id}/publication-evidence", headers=headers, json={"version": "v1.0"})
     assert prepared.status_code == 201
     assert prepared.json()["creator_near_account"] == "estarkunmi.testnet"
+    queued = repository._connect().execute("select status, version_id, commitment from publication_jobs").fetchone()
+    assert queued["status"] == "pending"
+    assert queued["version_id"] == prepared.json()["version_id"]
+    assert queued["commitment"] == prepared.json()["commitment"]
 
 
 def test_publication_confirmation_requires_dedicated_contract_owner(tmp_path: Path, monkeypatch):

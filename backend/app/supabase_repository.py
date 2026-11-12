@@ -114,6 +114,12 @@ class SupabaseRepository:
         rows = self._request("PATCH", "strategy_exchange_publication_evidence", params={"version_id": f"eq.{version_id}"}, body=changes, prefer="return=representation")
         return rows[0] if rows else None
 
+    def enqueue_publication_job(self, strategy_id: str, version_id: str, commitment: str) -> dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        body = {"strategy_id": strategy_id, "version_id": version_id, "commitment": commitment, "status": "pending", "attempts": 0, "next_attempt_at": now, "created_at": now, "updated_at": now}
+        rows = self._request("POST", "strategy_exchange_publication_jobs", body=body, prefer="resolution=merge-duplicates,return=representation")
+        return rows[0] if rows else body
+
     def save_subscription(self, strategy_id: str, follower_id: str, environment: str) -> dict[str, Any]:
         now = datetime.now(timezone.utc)
         body = {"strategy_id": strategy_id, "follower_id": follower_id, "status": "active", "environment": environment, "starts_at": now.isoformat(), "expires_at": (now + timedelta(days=30)).isoformat()}
