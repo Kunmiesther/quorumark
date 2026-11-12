@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { Check, Loader2, ShieldCheck, WalletCards } from "lucide-react";
 import { quorumarkApi, getWalletSession } from "@/lib/quorumark-api";
+import { ensureBrowserPolyfills } from "@/lib/browser-polyfills";
 import { getNearSelector } from "@/lib/wallet/near";
 import {
   EVIDENCE_CONTRACT_ACCOUNT,
@@ -44,6 +45,7 @@ function EvidenceDeploymentPage() {
       setMessage("Verify estarkunmi.testnet first, then return to this page.");
       return;
     }
+    await ensureBrowserPolyfills();
     const selector = await getNearSelector();
     const account = selector.store.getState().accounts?.[0];
     if (!account || account.accountId !== EVIDENCE_CONTRACT_OWNER) {
@@ -70,6 +72,7 @@ function EvidenceDeploymentPage() {
     setBusy("account");
     setMessage("Review the account-creation request in Meteor Wallet.");
     try {
+      await ensureBrowserPolyfills();
       const selector = await getNearSelector();
       const wallet = await selector.wallet();
       assertChildSignerCapability(wallet);
@@ -90,6 +93,7 @@ function EvidenceDeploymentPage() {
     setBusy("contract");
     setMessage("Review the contract deployment and initialization request in Meteor Wallet.");
     try {
+      await ensureBrowserPolyfills();
       const response = await fetch("/quorumark_publication_evidence.wasm");
       if (!response.ok) throw new Error("The evidence contract package is unavailable.");
       const selector = await getNearSelector();
