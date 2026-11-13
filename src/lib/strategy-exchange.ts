@@ -17,6 +17,7 @@ export type Strategy = {
   price: number;
   status: StrategyStatus;
   version: string;
+  versionId?: string;
   evidence: EvidenceClass;
   sample: boolean;
   metrics: Metrics;
@@ -41,6 +42,8 @@ export type Signal = {
   target: number;
   sizePct: number;
   createdAt: string;
+  strategyVersionId?: string;
+  source?: "fixture" | "historical" | "paper" | "live";
 };
 export type RiskPolicy = {
   capital: number;
@@ -149,7 +152,7 @@ export function evaluateSignal(signal: Signal, policy: RiskPolicy, follower: str
   if (policy.paused) {
     status = "rejected";
     reason = "Follower has paused execution";
-  } else if (!policy.approvedAssets.includes(signal.asset)) {
+  } else if (!policy.approvedAssets.some((asset) => isApprovedAsset(signal.asset, asset))) {
     status = "rejected";
     reason = `${signal.asset} is not on the approved asset list`;
   } else if (notional > policy.maxTrade) {
@@ -168,6 +171,16 @@ export function evaluateSignal(signal: Signal, policy: RiskPolicy, follower: str
     notional,
     at: now,
   };
+}
+
+export function isApprovedAsset(signalAsset: string, approvedAsset: string): boolean {
+  const normalize = (value: string) => value.toUpperCase().replace(/[\s/_-]/g, "");
+  const signal = normalize(signalAsset);
+  const approved = normalize(approvedAsset);
+  if (signal === approved) return true;
+  return ["USDT", "USDC", "USD", "NEAR", "BTC", "ETH"].some(
+    (quote) => signal.endsWith(quote) && signal.slice(0, -quote.length) === approved,
+  );
 }
 
 export function executePaper(
@@ -211,7 +224,7 @@ export type ExchangeState = {
   executions: Execution[];
   policy: RiskPolicy;
   wallet?: string;
-  subscription?: { strategyId: string; status: "active" | "expired"; receipt: string };
+  subscription?: { strategyId: string; strategyVersionId?: string; status: "active" | "expired"; receipt: string };
 };
 export function loadExchangeState(): ExchangeState {
   const wallet = getWalletSession()?.address;

@@ -145,6 +145,7 @@ class SignalInput(BaseModel):
     id: str = Field(min_length=1, max_length=160)
     strategy_id: str = Field(min_length=1, max_length=120)
     strategy_version: str = Field(min_length=1, max_length=100)
+    strategy_version_id: str | None = Field(default=None, max_length=120)
     asset: str = Field(min_length=1, max_length=30)
     side: Literal["long", "short"]
     entry: float = Field(gt=0)
@@ -157,6 +158,7 @@ class SignalInput(BaseModel):
 class PaperExecutionRequest(BaseModel):
     follower_id: str = Field(min_length=1, max_length=160)
     signal: SignalInput
+    subscription_id: str | None = Field(default=None, max_length=120)
     policy: RiskPolicy
     candles: list[Candle] = Field(min_length=2, max_length=10_000)
     idempotency_key: str | None = Field(default=None, max_length=200)

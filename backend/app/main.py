@@ -168,7 +168,18 @@ def reference_backtest(request: BacktestRequest) -> BacktestResponse:
 
 @app.post("/v1/paper/executions", response_model=PaperExecutionResponse)
 def paper_execution(request: PaperExecutionRequest, identity: str = Depends(require_verified_identity)) -> PaperExecutionResponse:
-    return process_paper_signal(request.model_copy(update={"follower_id": identity}), repository)
+    strategy = repository.get_strategy(request.signal.strategy_id)
+    if not strategy or strategy.get("status") != "published":
+        raise HTTPException(status_code=404, detail="Published strategy not found")
+    subscription = next((item for item in repository.list_subscriptions(identity) if item.get("id") == request.subscription_id and item.get("strategy_id") == strategy.get("id") and item.get("status") == "active"), None)
+    if not subscription:
+        raise HTTPException(status_code=403, detail="An active subscription to this strategy is required")
+    versions = repository.list_versions(strategy["id"])
+    version = next((item for item in versions if item.get("version") == request.signal.strategy_version or str(item.get("id")) == request.signal.strategy_version_id), None)
+    if not version:
+        raise HTTPException(status_code=409, detail="The signal is not bound to a published strategy version")
+    bound_request = request.model_copy(update={"follower_id": identity, "signal": request.signal.model_copy(update={"strategy_version_id": str(version.get("id"))})})
+    return process_paper_signal(bound_request, repository)
 
 
 @app.get("/v1/paper/executions")
@@ -178,7 +189,18 @@ def paper_executions(identity: str = Depends(require_verified_identity)) -> list
 
 @app.get("/v1/strategies")
 def strategies() -> list[dict[str, object]]:
-    return [to_public_strategy(item) for item in repository.list_strategies()]
+    published = []
+    for item in repository.list_strategies():
+        public = to_public_strategy(item)
+        version = next((candidate for candidate in repository.list_versions(item["id"]) if candidate.get("version") == item.get("current_version")), None)
+        if version:
+            metrics = version.get("backtest_metrics") or {}
+            public["current_version_id"] = version.get("id")
+            public["backtest_id"] = version.get("backtest_id")
+            public["backtest_metrics"] = metrics
+            public["performance_source"] = metrics.get("data_source") or metrics.get("source") or ("sample" if version.get("backtest_id") else None)
+        published.append(public)
+    return published
 
 
 @app.get("/v1/market-data/historical")

@@ -6,6 +6,30 @@ from datetime import datetime, timezone
 from .models import Candle, RiskPolicy, SignalInput
 
 
+KNOWN_QUOTE_ASSETS = ("USDT", "USDC", "USD", "NEAR", "BTC", "ETH")
+
+
+def normalize_asset(asset: str, approved_assets: list[str] | tuple[str, ...] = ()) -> str:
+    """Return the base asset used by follower policy approval.
+
+    Strategies may emit exchange symbols such as BTCUSDT while a follower
+    policy is intentionally configured with the human-readable base asset BTC.
+    Exact symbols remain valid, and only known quote suffixes are removed so a
+    malformed or unsupported symbol cannot become approved accidentally.
+    """
+    normalized = "".join(asset.upper().split()).replace("/", "").replace("-", "").replace("_", "")
+    approved = {
+        "".join(item.upper().split()).replace("/", "").replace("-", "").replace("_", "")
+        for item in approved_assets
+    }
+    if normalized in approved:
+        return normalized
+    for quote in KNOWN_QUOTE_ASSETS:
+        if normalized.endswith(quote) and normalized[: -len(quote)] in approved:
+            return normalized[: -len(quote)]
+    return normalized
+
+
 @dataclass(frozen=True)
 class RiskDecision:
     status: str
@@ -27,7 +51,9 @@ def evaluate_signal_risk(
 ) -> RiskDecision:
     if policy.paused:
         return RiskDecision("rejected", "POLICY_PAUSED", "Follower has paused paper execution", 0, 0, 0, 0)
-    if signal.asset.upper() not in {asset.upper() for asset in policy.approved_assets}:
+    approved_assets = {normalize_asset(asset, policy.approved_assets) for asset in policy.approved_assets}
+    normalized_signal = normalize_asset(signal.asset, policy.approved_assets)
+    if normalized_signal not in approved_assets:
         return RiskDecision("rejected", "ASSET_NOT_APPROVED", f"{signal.asset} is not approved by the follower", 0, 0, 0, 0)
     if not candles:
         return RiskDecision("rejected", "MARKET_DATA_REQUIRED", "A completed market-data snapshot is required", 0, 0, 0, 0)

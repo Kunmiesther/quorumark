@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateSignal, executePaper, recomputePerformance, runReferenceBacktest, seedStrategies } from "./strategy-exchange";
+import { evaluateSignal, executePaper, isApprovedAsset, recomputePerformance, runReferenceBacktest, seedStrategies } from "./strategy-exchange";
 
 describe("strategy exchange safety boundary", () => {
   const signal = seedStrategies[0].signals[0];
@@ -23,5 +23,9 @@ describe("strategy exchange safety boundary", () => {
   });
   it("produces deterministic backtest output", () => {
     expect(runReferenceBacktest()).toEqual(runReferenceBacktest());
+  });
+  it("treats a quote pair as approved only through its approved base asset", () => {
+    expect(isApprovedAsset("BTCUSDT", "BTC")).toBe(true);
+    expect(isApprovedAsset("SOLUSDT", "BTC")).toBe(false);
   });
 });

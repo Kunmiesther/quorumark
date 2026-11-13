@@ -7,7 +7,7 @@ from app.market_data import MarketDataError, validate_candles
 from app.models import BacktestRequest, Candle, PaperExecutionRequest, ReferenceStrategyParams, RiskPolicy, SignalInput
 from app.paper import process_paper_signal
 from app.repository import PaperRepository
-from app.risk import evaluate_signal_risk
+from app.risk import evaluate_signal_risk, normalize_asset
 
 
 def make_candle(index: int, close: float, *, low: float | None = None, high: float | None = None) -> Candle:
@@ -42,6 +42,21 @@ def test_risk_rejects_max_loss_before_execution():
     assert decision.reason_code == "MAX_LOSS_EXCEEDED"
 
 
+def test_risk_approves_quote_pair_when_follower_approves_base_asset():
+    candles = [make_candle(i, 100) for i in range(3)]
+    signal = SignalInput(id="sig-pair", strategy_id="s", strategy_version="v1", asset="BTCUSDT", side="long", entry=100, stop=99, target=102, size_pct=5, created_at=candles[0].timestamp)
+    policy = RiskPolicy(capital=10_000, max_trade=10_000, max_position=10_000, max_loss=1_000, approved_assets=["BTC"])
+    assert normalize_asset("BTCUSDT", policy.approved_assets) == "BTC"
+    assert evaluate_signal_risk(signal, policy, candles, now=candles[-1].timestamp).reason_code == "POLICY_APPROVED"
+
+
+def test_risk_rejects_unapproved_quote_pair():
+    candles = [make_candle(i, 100) for i in range(3)]
+    signal = SignalInput(id="sig-pair-reject", strategy_id="s", strategy_version="v1", asset="SOLUSDT", side="long", entry=100, stop=99, target=102, size_pct=5, created_at=candles[0].timestamp)
+    policy = RiskPolicy(capital=10_000, max_trade=10_000, max_position=10_000, max_loss=1_000, approved_assets=["BTC"])
+    assert evaluate_signal_risk(signal, policy, candles, now=candles[-1].timestamp).reason_code == "ASSET_NOT_APPROVED"
+
+
 def test_paper_execution_is_idempotent(tmp_path):
     candles = [make_candle(i, 100 + i) for i in range(4)]
     request = PaperExecutionRequest(
@@ -57,3 +72,17 @@ def test_paper_execution_is_idempotent(tmp_path):
     assert first.evidence_hash == second.evidence_hash
     assert first.execution_id == second.execution_id
     assert len(repository.list_executions("near:testnet")) == 1
+
+
+def test_paper_execution_keeps_strategy_and_version_provenance(tmp_path):
+    candles = [make_candle(i, 100 + i) for i in range(4)]
+    request = PaperExecutionRequest(
+        follower_id="near:testnet",
+        subscription_id="sub-ethereum",
+        signal=SignalInput(id="sig-traceable", strategy_id="strategy-ethereum", strategy_version="v2.0", strategy_version_id="version-ethereum", asset="ETHUSDT", side="long", entry=100, stop=90, target=120, size_pct=5, created_at=candles[0].timestamp),
+        policy=RiskPolicy(capital=10_000, max_trade=10_000, max_position=10_000, max_loss=1_000, approved_assets=["ETH"]),
+        candles=candles,
+        idempotency_key="exec-traceable",
+    )
+    response = process_paper_signal(request, PaperRepository(str(tmp_path / "ledger.sqlite")))
+    assert response.evidence_hash

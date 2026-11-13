@@ -30,7 +30,16 @@ def process_paper_signal(request: PaperExecutionRequest, repository: PaperReposi
     }
     decision_id = "dec_" + uuid.uuid5(uuid.NAMESPACE_URL, f"{key}:decision").hex[:24]
     created_at = datetime.now(timezone.utc).isoformat()
-    decision_record = {"id": decision_id, "signal_id": signal.id, "follower_id": request.follower_id, "created_at": created_at, **decision}
+    provenance = {
+        "signal_id": signal.id,
+        "asset": signal.asset,
+        "strategy_id": signal.strategy_id,
+        "strategy_version": signal.strategy_version,
+        "strategy_version_id": signal.strategy_version_id,
+        "subscription_id": request.subscription_id,
+        "signal_source": request.source,
+    }
+    decision_record = {"id": decision_id, "signal_id": signal.id, "follower_id": request.follower_id, "created_at": created_at, **provenance, **decision}
     repository.save_decision(decision_record)
     execution = None
     if risk.status == "accepted":
@@ -57,6 +66,6 @@ def process_paper_signal(request: PaperExecutionRequest, repository: PaperReposi
         fee = (quantity * entry + quantity * exit_price) * request.policy.fee_bps / 10_000
         execution = Execution(timestamp=datetime.now(timezone.utc), side="sell" if signal.side == "long" else "buy", price=exit_price, quantity=quantity, fee=fee, realized_pnl=gross_pnl - fee, order_type="exit", position_id="pos_" + uuid.uuid4().hex[:16], slippage=0, reason=reason, notional=risk.notional, follower_id=request.follower_id)
     execution_id = "exec_" + uuid.uuid4().hex[:20] if execution else None
-    response_data = {"decision": decision, "execution": execution.model_dump(mode="json") if execution else None, "evidence_hash": evidence_hash({"signal": signal.model_dump(mode="json"), "decision": decision, "execution": execution.model_dump(mode="json") if execution else None}), "idempotency_key": key, "execution_id": execution_id}
+    response_data = {"decision": decision, "execution": execution.model_dump(mode="json") if execution else None, **provenance, "evidence_hash": evidence_hash({"signal": signal.model_dump(mode="json"), "decision": decision, "execution": execution.model_dump(mode="json") if execution else None, **provenance}), "idempotency_key": key, "execution_id": execution_id}
     repository.save_execution({"id": execution_id or "decision_" + uuid.uuid4().hex[:20], "idempotency_key": key, "decision_id": decision_id, "follower_id": request.follower_id, "created_at": created_at, **response_data})
     return PaperExecutionResponse(decision=RiskDecisionResponse(**decision), execution=execution, idempotency_key=key, evidence_hash=response_data["evidence_hash"], execution_id=execution_id)

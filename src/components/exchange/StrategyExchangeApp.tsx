@@ -157,6 +157,9 @@ type BackendStrategyRecord = {
   current_version: string;
   evidence_class: Strategy["evidence"];
   created_at: string;
+  current_version_id?: string;
+  backtest_id?: string | null;
+  backtest_metrics?: { returnPct?: number; winRate?: number; drawdownPct?: number; trades?: number; costs?: number; equity?: number[]; equity_curve?: number[] } | null;
 };
 
 type StrategyProposal = {
@@ -208,7 +211,8 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
   const [ledgerError, setLedgerError] = useState<string | null>(null);
   const [publicEvidence, setPublicEvidence] = useState<PublicEvidence | null>(null);
   const selectedStrategy = slug ? state.strategies.find((item) => item.slug === slug) : undefined;
-  const strategy = selectedStrategy ?? state.strategies[0];
+  const subscribedStrategy = state.subscription ? state.strategies.find((item) => item.id === state.subscription?.strategyId) : undefined;
+  const strategy = selectedStrategy ?? subscribedStrategy ?? state.strategies[0];
   const [marketplaceLoading, setMarketplaceLoading] = useState(view === "detail");
   const [marketplaceError, setMarketplaceError] = useState<string | null>(null);
   const update = (next: typeof state) => {
@@ -248,15 +252,16 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
           price: Number(record.monthly_price ?? 0),
           status: record.status as Strategy["status"],
           version: String(record.current_version),
+          versionId: record.current_version_id,
           evidence: record.evidence_class as Strategy["evidence"],
           sample: false,
           metrics: {
-            returnPct: 0,
-            winRate: 0,
-            drawdownPct: 0,
-            trades: 0,
-            costs: 0,
-            equity: [10_000],
+            returnPct: Number(record.backtest_metrics?.returnPct ?? 0),
+            winRate: Number(record.backtest_metrics?.winRate ?? 0),
+            drawdownPct: Number(record.backtest_metrics?.drawdownPct ?? 0),
+            trades: Number(record.backtest_metrics?.trades ?? 0),
+            costs: Number(record.backtest_metrics?.costs ?? 0),
+            equity: record.backtest_metrics?.equity ?? record.backtest_metrics?.equity_curve ?? [],
           },
           signals: [
             {
@@ -269,6 +274,8 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
               target: 1.04,
               sizePct: 10,
               createdAt: String(record.created_at),
+              strategyVersionId: record.current_version_id,
+              source: "fixture" as const,
             },
           ],
         }));
@@ -325,16 +332,21 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
     quorumarkApi<Array<{
       execution?: { price: number; realized_pnl: number; fee: number; timestamp: string; side: string; notional: number };
       execution_id?: string;
+      strategy_id?: string;
+      strategy_version?: string;
+      strategy_version_id?: string;
+      asset?: string;
     }>>("/v1/paper/executions")
       .then(
         (records) => {
           const executions = records
+            .filter((record) => record.strategy_id === strategy.id && (record.strategy_version_id === strategy.versionId || record.strategy_version === strategy.version))
             .filter((record) => record.execution)
             .map((record) => ({
               id: record.execution_id ?? "backend-paper",
               signalId: "backend",
               follower,
-              asset: strategy.signals[0].asset,
+              asset: record.asset ?? strategy.signals[0].asset,
               side: record.execution!.side,
               notional: record.execution!.notional,
               entry: strategy.signals[0].entry,
@@ -353,7 +365,7 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
           error instanceof Error ? error.message : "The activity record could not be loaded",
         ),
       );
-  }, [state.wallet, strategy.signals, view]);
+  }, [state.wallet, strategy.id, strategy.version, strategy.versionId, strategy.signals, view]);
 
   function connectWallet() {
     navigate({ to: "/connect-wallet" });
@@ -387,7 +399,7 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
       });
       update({
         ...state,
-        subscription: { strategyId: strategy.id, status: "active", receipt: result.id },
+        subscription: { strategyId: strategy.id, strategyVersionId: strategy.versionId, status: "active", receipt: result.id },
       });
       toast.success("Your practice subscription is active");
       navigate({ to: "/follower" });
@@ -433,12 +445,22 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
       toast.error("Paper following is not configured");
       return;
     }
+    if (!state.subscription || state.subscription.strategyId !== strategy.id) {
+      toast.error("Subscribe to this strategy before reviewing its signals.");
+      return;
+    }
     const candles = buildFixtureCandles();
     const sourceSignal = strategy.signals[0];
+    if (!sourceSignal.asset || !strategy.versionId) {
+      toast.error("This published version has no signal data to review yet.");
+      return;
+    }
     const signal = {
       ...sourceSignal,
       createdAt: candles[0].timestamp,
       strategyVersion: strategy.version,
+      strategyVersionId: strategy.versionId,
+      source: "fixture" as const,
     };
     const fallbackDecision = evaluateSignal(
       sourceSignal,
@@ -459,6 +481,7 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
               id: signal.id,
               strategy_id: signal.strategyId,
               strategy_version: signal.strategyVersion,
+              strategy_version_id: signal.strategyVersionId,
               asset: signal.asset,
               side: signal.side,
               entry: signal.entry,
@@ -467,6 +490,7 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
               size_pct: signal.sizePct,
               created_at: signal.createdAt,
             },
+            subscription_id: state.subscription.receipt,
             policy: {
               capital: state.policy.capital,
               max_trade: state.policy.maxTrade,
@@ -560,7 +584,7 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
           onRun={runSignal}
         />
       )}
-      {view === "subscriptions" && <Subscriptions state={state} onCancel={cancelSubscription} />}
+      {view === "subscriptions" && <Subscriptions state={state} strategy={strategy} onCancel={cancelSubscription} />}
       {view === "verification" && (
         <Verification state={state} strategy={strategy} evidence={publicEvidence} error={ledgerError} />
       )}
@@ -652,12 +676,12 @@ function Marketplace({
               <div className="q-card-stats">
                 <Metric
                   label="Performance"
-                  value={item.sample ? "Illustrative" : `${item.metrics.returnPct}%`}
+                  value={item.sample ? "Illustrative" : item.metrics.equity.length > 1 ? `${item.metrics.returnPct}%` : "Not tested"}
                   tone={item.sample ? "" : "positive"}
                 />
                 <Metric
                   label="Drawdown"
-                  value={item.sample ? "See record" : `${item.metrics.drawdownPct}%`}
+                  value={item.sample ? "See record" : item.metrics.equity.length > 1 ? `${item.metrics.drawdownPct}%` : "Not available"}
                 />
                 <Metric label="Access" value={`$${item.price}/mo`} />
               </div>
@@ -701,15 +725,19 @@ function Detail({ strategy, evidence, onSubscribe }: { strategy: Strategy; evide
               <span>{illustrative ? "Illustrative curve" : "Verified strategy curve"}</span>
               <span className="q-mono-label">{illustrative ? "Example only" : "From records"}</span>
             </div>
-            <Chart values={strategy.metrics.equity} label="Strategy performance curve" />
-            <div className="q-chart-labels">
-              <span>{illustrative ? "Sample data" : "Starting equity"}</span>
-              <span>
-                {illustrative
-                  ? "Not a return claim"
-                  : `Latest $${fmt(strategy.metrics.equity.at(-1) ?? 0)}`}
-              </span>
-            </div>
+            {strategy.metrics.equity.length > 1 ? (
+              <>
+                <Chart values={strategy.metrics.equity} label="Strategy performance curve" />
+                <div className="q-chart-labels">
+                  <span>{illustrative ? "Sample data" : `Starting $${fmt(strategy.metrics.equity[0])}`}</span>
+                  <span>{illustrative ? "Not a return claim" : `Latest $${fmt(strategy.metrics.equity.at(-1) ?? 0)}`}</span>
+                </div>
+              </>
+            ) : (
+              <div className="q-result-empty">
+                <p>{illustrative ? "This example uses sample data only." : "No saved performance curve is available for this published version yet."}</p>
+              </div>
+            )}
           </div>
         </div>
         <aside className="q-side-card q-detail-aside">
@@ -1283,8 +1311,8 @@ function Follower({
         </div>
         <div className="q-panel q-signal-panel">
           <div className="q-card-top">
-            <h2>Latest private signal</h2>
-            <span>One decision at a time</span>
+            <h2>Practice signal</h2>
+            <span>{strategy.name} · {strategy.version}</span>
           </div>
           <div className="q-signal-route">
             <span className="q-route-step">Signal</span>
@@ -1293,21 +1321,18 @@ function Follower({
             <i />
             <span className="q-route-step">Paper record</span>
           </div>
-          <div className="q-signal">
+          {state.subscription?.strategyId === strategy.id ? <div className="q-signal">
             <strong>
               {strategy.signals[0].asset} · {strategy.signals[0].side}
             </strong>
             <span>
               Entry ${fmt(strategy.signals[0].entry)} · target ${fmt(strategy.signals[0].target)}
             </span>
-            <button
-              className="q-primary"
-              disabled={!state.subscription || providerBusy}
-              onClick={onRun}
-            >
+            <small className="q-muted">Sample market data · linked to this strategy version and your subscription</small>
+            <button className="q-primary" disabled={providerBusy} onClick={onRun}>
               <ShieldCheck size={16} /> {providerBusy ? "Reviewing signal…" : "Review signal"}
             </button>
-          </div>
+          </div> : <div className="q-empty">Subscribe to a published strategy to receive a version-linked practice signal.</div>}
         </div>
       </div>
       <div className="q-panel q-audit-panel">
@@ -1328,8 +1353,7 @@ function Follower({
               />
               <div>
                 <strong>
-                  {decision.status === "accepted" ? "Accepted" : "Rejected"} ·{" "}
-                  {strategy.signals[0].asset}
+                    {decision.status === "accepted" ? "Accepted" : "Rejected"} · {strategy.signals[0].asset} · {strategy.version}
                 </strong>
                 <p>{decision.reason}</p>
               </div>
@@ -1342,7 +1366,7 @@ function Follower({
   );
 }
 
-function Subscriptions({ state, onCancel }: { state: ReturnType<typeof loadExchangeState>; onCancel: () => void }) {
+function Subscriptions({ state, strategy, onCancel }: { state: ReturnType<typeof loadExchangeState>; strategy: Strategy; onCancel: () => void }) {
   return (
     <section>
       <p className="q-kicker">Your access</p>
@@ -1353,7 +1377,7 @@ function Subscriptions({ state, onCancel }: { state: ReturnType<typeof loadExcha
           <span className="q-status">
             <i /> {state.subscription ? "Practice subscription active" : "No active subscription"}
           </span>
-          <h2>{state.subscription ? "Aurora Breakout" : "Discover a strategy"}</h2>
+          <h2>{state.subscription ? strategy.name : "Discover a strategy"}</h2>
           <p>
             {state.subscription
               ? "Private signals are available in your Follower Desk."
