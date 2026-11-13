@@ -13,7 +13,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ConnectWalletRouteImport } from './routes/connect-wallet'
 import { Route as FollowerRouteImport } from './routes/follower'
-import { Route as MarketplaceRouteImport } from './routes/marketplace'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as RiskDisclosureRouteImport } from './routes/risk-disclosure'
 import { Route as StudioRouteImport } from './routes/studio'
@@ -42,11 +41,6 @@ const ConnectWalletRoute = ConnectWalletRouteImport.update({
 const FollowerRoute = FollowerRouteImport.update({
   id: '/follower',
   path: '/follower',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MarketplaceRoute = MarketplaceRouteImport.update({
-  id: '/marketplace',
-  path: '/marketplace',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -85,14 +79,14 @@ const AdminEvidenceDeploymentRoute = AdminEvidenceDeploymentRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const MarketplaceIndexRoute = MarketplaceIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => MarketplaceRoute,
+  id: '/marketplace/',
+  path: '/marketplace/',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const MarketplaceSlugRoute = MarketplaceSlugRouteImport.update({
-  id: '/$slug',
-  path: '/$slug',
-  getParentRoute: () => MarketplaceRoute,
+  id: '/marketplace/$slug',
+  path: '/marketplace/$slug',
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -100,7 +94,6 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/connect-wallet': typeof ConnectWalletRoute
   '/follower': typeof FollowerRoute
-  '/marketplace': typeof MarketplaceRouteWithChildren
   '/privacy': typeof PrivacyRoute
   '/risk-disclosure': typeof RiskDisclosureRoute
   '/studio': typeof StudioRoute
@@ -132,7 +125,6 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/connect-wallet': typeof ConnectWalletRoute
   '/follower': typeof FollowerRoute
-  '/marketplace': typeof MarketplaceRouteWithChildren
   '/privacy': typeof PrivacyRoute
   '/risk-disclosure': typeof RiskDisclosureRoute
   '/studio': typeof StudioRoute
@@ -150,7 +142,6 @@ export interface FileRouteTypes {
     | '/auth'
     | '/connect-wallet'
     | '/follower'
-    | '/marketplace'
     | '/privacy'
     | '/risk-disclosure'
     | '/studio'
@@ -181,7 +172,6 @@ export interface FileRouteTypes {
     | '/auth'
     | '/connect-wallet'
     | '/follower'
-    | '/marketplace'
     | '/privacy'
     | '/risk-disclosure'
     | '/studio'
@@ -198,7 +188,6 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ConnectWalletRoute: typeof ConnectWalletRoute
   FollowerRoute: typeof FollowerRoute
-  MarketplaceRoute: typeof MarketplaceRouteWithChildren
   PrivacyRoute: typeof PrivacyRoute
   RiskDisclosureRoute: typeof RiskDisclosureRoute
   StudioRoute: typeof StudioRoute
@@ -206,6 +195,8 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   VerificationRoute: typeof VerificationRoute
   AdminEvidenceDeploymentRoute: typeof AdminEvidenceDeploymentRoute
+  MarketplaceSlugRoute: typeof MarketplaceSlugRoute
+  MarketplaceIndexRoute: typeof MarketplaceIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -236,13 +227,6 @@ declare module '@tanstack/react-router' {
       path: '/follower'
       fullPath: '/follower'
       preLoaderRoute: typeof FollowerRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/marketplace': {
-      id: '/marketplace'
-      path: '/marketplace'
-      fullPath: '/marketplace'
-      preLoaderRoute: typeof MarketplaceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -296,41 +280,26 @@ declare module '@tanstack/react-router' {
     }
     '/marketplace/': {
       id: '/marketplace/'
-      path: '/'
+      path: '/marketplace'
       fullPath: '/marketplace/'
       preLoaderRoute: typeof MarketplaceIndexRouteImport
-      parentRoute: typeof MarketplaceRoute
+      parentRoute: typeof rootRouteImport
     }
     '/marketplace/$slug': {
       id: '/marketplace/$slug'
-      path: '/$slug'
+      path: '/marketplace/$slug'
       fullPath: '/marketplace/$slug'
       preLoaderRoute: typeof MarketplaceSlugRouteImport
-      parentRoute: typeof MarketplaceRoute
+      parentRoute: typeof rootRouteImport
     }
   }
 }
-
-interface MarketplaceRouteChildren {
-  MarketplaceSlugRoute: typeof MarketplaceSlugRoute
-  MarketplaceIndexRoute: typeof MarketplaceIndexRoute
-}
-
-const MarketplaceRouteChildren: MarketplaceRouteChildren = {
-  MarketplaceSlugRoute: MarketplaceSlugRoute,
-  MarketplaceIndexRoute: MarketplaceIndexRoute,
-}
-
-const MarketplaceRouteWithChildren = MarketplaceRoute._addFileChildren(
-  MarketplaceRouteChildren,
-)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
   ConnectWalletRoute: ConnectWalletRoute,
   FollowerRoute: FollowerRoute,
-  MarketplaceRoute: MarketplaceRouteWithChildren,
   PrivacyRoute: PrivacyRoute,
   RiskDisclosureRoute: RiskDisclosureRoute,
   StudioRoute: StudioRoute,
@@ -338,6 +307,8 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   VerificationRoute: VerificationRoute,
   AdminEvidenceDeploymentRoute: AdminEvidenceDeploymentRoute,
+  MarketplaceSlugRoute: MarketplaceSlugRoute,
+  MarketplaceIndexRoute: MarketplaceIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
