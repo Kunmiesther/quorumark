@@ -31,11 +31,14 @@ do not disable any current demo path because no relay is called.
 
 The reference backtest supports two explicit data sources: deterministic,
 labeled fixture candles for offline runs, and a server-side public historical
-OHLCV adapter. Set `MARKET_DATA_PROVIDER=binance_public` or
-`kraken_public`; these public adapters require no API key and record provider,
-symbol, interval, and source metadata. If a provider is unreachable, the API
-returns an error; it never substitutes fixture candles or presents history as
-live performance. `MARKET_DATA_API_KEY` is not required by either adapter.
+OHLCV adapter. Production defaults to Coinbase Exchange's public candles API
+(`MARKET_DATA_PROVIDER=coinbase_public`) with explicit 1-hour, 4-hour, and
+daily granularities. Canonical strategy symbols remain USDT-quoted; the
+adapter records its documented USD market mapping in provenance. Binance and
+Kraken adapters remain available where their public endpoints are accessible.
+If a provider is unreachable, the API returns an error; it never substitutes
+fixture candles or presents history as live performance. `MARKET_DATA_API_KEY`
+is not required by these public adapters.
 
 The AI strategy-proposal, refinement, analysis, and agent-assessment routes use
 a server-only Gemini GenerateContent API when `AI_PROVIDER=gemini`, a NEAR AI

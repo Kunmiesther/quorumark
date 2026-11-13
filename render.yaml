@@ -52,6 +52,14 @@ services:
         value: "false"
       - key: QUORUMARK_EVALUATION_SCHEDULER_TOKEN
         sync: false
+      - key: MARKET_DATA_PROVIDER
+        value: coinbase_public
+      - key: MARKET_DATA_API_URL
+        value: https://api.exchange.coinbase.com/products/{product}/candles
+      - key: MARKET_DATA_REQUEST_TIMEOUT_SECONDS
+        value: "15"
+      - key: MARKET_DATA_MAX_RETRIES
+        value: "2"
 
   - type: web
     name: quorumark-web
