@@ -76,3 +76,16 @@ def test_coinbase_adapter_retries_transient_provider_failure(monkeypatch):
     candles, _ = fetch_coinbase_candles("BTCUSDT", "1h", 10)
     assert len(candles) == 10
     assert calls["count"] == 2
+
+
+def test_coinbase_adapter_aggregates_completed_four_hour_candles(monkeypatch):
+    now = datetime.now(timezone.utc)
+    base = int(now.timestamp()) // 14_400 * 14_400 - 40 * 3_600
+    rows = [[base + index * 3_600, "100", "103", "101", "102", "10"] for index in range(40)]
+    monkeypatch.setattr("app.historical_data.httpx.get", lambda *args, **kwargs: _Response(rows))
+
+    candles, provenance = fetch_coinbase_candles("BTCUSDT", "4h", 10)
+
+    assert len(candles) == 10
+    assert all(int(candle.timestamp.timestamp()) % 14_400 == 0 for candle in candles)
+    assert provenance["interval"] == "4h"

@@ -66,7 +66,8 @@ def fetch_coinbase_candles(symbol: str, interval: str = "1h", limit: int = 200) 
     if not normalized.endswith("USDT"):
         raise HistoricalDataError("Coinbase public adapter supports USDT-quoted strategy symbols only")
     product = f"{normalized[:-4]}-USD"
-    granularity = {"1m": 60, "5m": 300, "15m": 900, "1h": 3_600, "4h": 14_400, "1d": 86_400}[interval]
+    granularity = {"1m": 60, "5m": 300, "15m": 900, "1h": 3_600, "4h": 3_600, "1d": 86_400}[interval]
+    target_interval_seconds = {"1m": 60, "5m": 300, "15m": 900, "1h": 3_600, "4h": 14_400, "1d": 86_400}[interval]
     configured_url = os.getenv("MARKET_DATA_API_URL", "").strip()
     url_template = configured_url if "{product}" in configured_url else "https://api.exchange.coinbase.com/products/{product}/candles"
     url = url_template.format(product=product)
@@ -86,12 +87,25 @@ def fetch_coinbase_candles(symbol: str, interval: str = "1h", limit: int = 200) 
         interval_seconds = granularity
         now = datetime.now(timezone.utc)
         current_bucket = int(now.timestamp()) // interval_seconds * interval_seconds
-        candles = []
+        raw_candles = []
         for row in sorted(rows, key=lambda item: int(item[0])):
             timestamp = datetime.fromtimestamp(int(row[0]), tz=timezone.utc)
             if int(row[0]) + interval_seconds > current_bucket:
                 continue
-            candles.append(Candle(timestamp=timestamp, low=float(row[1]), high=float(row[2]), open=float(row[3]), close=float(row[4]), volume=float(row[5]), source=f"coinbase_exchange:{product}:{interval}", complete=True))
+            raw_candles.append(Candle(timestamp=timestamp, low=float(row[1]), high=float(row[2]), open=float(row[3]), close=float(row[4]), volume=float(row[5]), source=f"coinbase_exchange:{product}:{interval}", complete=True))
+        if interval == "4h":
+            grouped: dict[int, list[Candle]] = {}
+            for candle in raw_candles:
+                bucket = int(candle.timestamp.timestamp()) // target_interval_seconds * target_interval_seconds
+                grouped.setdefault(bucket, []).append(candle)
+            candles = []
+            for bucket, group in sorted(grouped.items()):
+                group.sort(key=lambda item: item.timestamp)
+                if len(group) != 4:
+                    continue
+                candles.append(Candle(timestamp=datetime.fromtimestamp(bucket, tz=timezone.utc), open=group[0].open, high=max(item.high for item in group), low=min(item.low for item in group), close=group[-1].close, volume=sum(item.volume for item in group), source=f"coinbase_exchange:{product}:4h", complete=True))
+        else:
+            candles = raw_candles
         candles = candles[-min(limit, 300):]
     except (TypeError, ValueError, IndexError, KeyError) as error:
         raise HistoricalDataError("Coinbase public market-data provider returned malformed candles") from error
