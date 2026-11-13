@@ -207,7 +207,10 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
   const [providerBusy, setProviderBusy] = useState(false);
   const [ledgerError, setLedgerError] = useState<string | null>(null);
   const [publicEvidence, setPublicEvidence] = useState<PublicEvidence | null>(null);
-  const strategy = state.strategies.find((item) => item.slug === slug) ?? state.strategies[0];
+  const selectedStrategy = slug ? state.strategies.find((item) => item.slug === slug) : undefined;
+  const strategy = selectedStrategy ?? state.strategies[0];
+  const [marketplaceLoading, setMarketplaceLoading] = useState(view === "detail");
+  const [marketplaceError, setMarketplaceError] = useState<string | null>(null);
   const update = (next: typeof state) => {
     setState(next);
     saveExchangeState(next);
@@ -225,6 +228,10 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
 
   useEffect(() => {
     if (!(["marketplace", "detail", "follower", "subscriptions", "verification"] as ExchangeView[]).includes(view)) return;
+    if (view === "detail") {
+      setMarketplaceLoading(true);
+      setMarketplaceError(null);
+    }
     quorumarkApi<BackendStrategyRecord[]>("/v1/strategies")
       .then((records) => {
         const published = records.map((record) => ({
@@ -271,17 +278,22 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
             strategies: [...published, ...current.strategies.filter((item) => item.sample)],
           }));
       })
-      .catch(() => {
-        // Public discovery remains usable with the clearly-labelled illustrative sample.
+      .catch((error) => {
+        if (view === "detail") {
+          setMarketplaceError(error instanceof Error ? error.message : "We couldn't load that strategy.");
+        }
+      })
+      .finally(() => {
+        if (view === "detail") setMarketplaceLoading(false);
       });
-  }, [view]);
+  }, [slug, view]);
 
   useEffect(() => {
-    if (!strategy || strategy.sample || !(["detail", "verification"] as ExchangeView[]).includes(view)) return;
-    quorumarkApi<PublicEvidence>(`/v1/strategies/${strategy.id}/public-evidence`)
+    if (!selectedStrategy || selectedStrategy.sample || !(["detail", "verification"] as ExchangeView[]).includes(view)) return;
+    quorumarkApi<PublicEvidence>(`/v1/strategies/${selectedStrategy.id}/public-evidence`)
       .then(setPublicEvidence)
       .catch(() => setPublicEvidence(null));
-  }, [strategy?.id, strategy?.sample, view]);
+  }, [selectedStrategy?.id, selectedStrategy?.sample, view]);
 
   useEffect(() => {
     if (!state.wallet || !(["follower", "subscriptions"] as ExchangeView[]).includes(view)) return;
@@ -529,7 +541,13 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
           onQuery={setQuery}
         />
       )}
-      {view === "detail" && <Detail strategy={strategy} evidence={publicEvidence} onSubscribe={subscribe} />}
+      {view === "detail" && (selectedStrategy ? (
+        <Detail strategy={selectedStrategy} evidence={publicEvidence} onSubscribe={subscribe} />
+      ) : marketplaceLoading ? (
+        <section className="q-empty-state"><h1>Loading strategy</h1><p>We’re opening the published strategy details.</p></section>
+      ) : (
+        <section className="q-empty-state"><h1>Strategy unavailable</h1><p>{marketplaceError ?? "That strategy is not currently published."}</p><Link className="q-button q-button-primary" to="/marketplace">Back to marketplace</Link></section>
+      ))}
       {view === "studio" && (
         <Studio strategy={strategy} onBack={() => navigate({ to: "/marketplace" })} />
       )}
