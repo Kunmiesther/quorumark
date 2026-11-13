@@ -22,6 +22,7 @@ import {
   loadExchangeState,
   recomputePerformance,
   saveExchangeState,
+  type ExchangeState,
   type Metrics,
   type Strategy,
 } from "@/lib/strategy-exchange";
@@ -305,13 +306,15 @@ export function StrategyExchangeApp({ view, slug }: { view: ExchangeView; slug?:
   useEffect(() => {
     if (!state.wallet || !(["follower", "subscriptions"] as ExchangeView[]).includes(view)) return;
     Promise.all([
-      quorumarkApi<Array<{ strategy_id: string; status: "active" | "cancelled" | "expired"; id: string }>>("/v1/subscriptions/me"),
+      quorumarkApi<Array<{ strategy_id: string; version_id?: string; status: "active" | "cancelled" | "expired"; id: string }>>("/v1/subscriptions/me"),
       quorumarkApi<{ capital?: number; max_trade?: number; max_position?: number; max_loss?: number; max_slippage_bps?: number; approved_assets?: string[]; paused?: boolean }>("/v1/follower/policy"),
-    ]).then(([subscriptions, policy]) => {
+      quorumarkApi<ExchangeState["agentStatus"]>("/v1/follower/agent-status"),
+    ]).then(([subscriptions, policy, agentStatus]) => {
       const active = subscriptions.find((item) => item.status === "active");
       setState((current) => ({
         ...current,
-        subscription: active ? { strategyId: active.strategy_id, status: "active", receipt: active.id } : undefined,
+        subscription: active ? { strategyId: active.strategy_id, strategyVersionId: active.version_id, status: "active", receipt: active.id } : undefined,
+        agentStatus: agentStatus ?? current.agentStatus,
         policy: {
           ...current.policy,
           capital: policy.capital ?? current.policy.capital,
@@ -1334,6 +1337,22 @@ function Follower({
             </button>
           </div> : <div className="q-empty">Subscribe to a published strategy to receive a version-linked practice signal.</div>}
         </div>
+      </div>
+      <div className="q-panel q-agent-status-panel">
+        <div className="q-card-top">
+          <div>
+            <h2>Strategy agent</h2>
+            <span className="q-mono-label">{strategy.name} · {strategy.version}</span>
+          </div>
+          <span className="q-status"><i /> {state.agentStatus?.status?.replaceAll("_", " ") ?? "Awaiting next candle"}</span>
+        </div>
+        {state.agentStatus?.latest_signal ? (
+          <p className="q-muted">
+            Latest autonomous decision: <strong>{state.agentStatus.latest_signal.decision}</strong> · {state.agentStatus.latest_signal.source} · {state.agentStatus.latest_signal.candle_timestamp ? new Date(state.agentStatus.latest_signal.candle_timestamp).toLocaleString() : "time unavailable"}
+          </p>
+        ) : (
+          <p className="q-muted">No autonomous market-data signal has been recorded for this subscription yet. Sample-data practice signals are kept separate below.</p>
+        )}
       </div>
       <div className="q-panel q-audit-panel">
         <div className="q-card-top">

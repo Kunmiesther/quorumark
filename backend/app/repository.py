@@ -58,6 +58,7 @@ class PaperRepository:
               create table if not exists subscriptions (
                 id text primary key, strategy_id text not null, follower_id text not null,
                 status text not null, environment text not null, created_at text not null,
+                version_id text,
                 cancelled_at text, unique(strategy_id, follower_id)
               );
               create table if not exists risk_policies (
@@ -80,7 +81,20 @@ class PaperRepository:
                 model text not null, actor_id text not null, input text not null,
                 output text not null, status text not null, created_at text not null
               );
+              create table if not exists autonomous_evaluations (
+                id text primary key, strategy_id text not null, version_id text not null,
+                observation_key text not null unique, decision text not null, status text not null,
+                source text not null, candle_timestamp text not null, payload text not null, created_at text not null
+              );
+              create table if not exists autonomous_signals (
+                id text primary key, strategy_id text not null, version_id text not null,
+                observation_key text not null unique, payload text not null, created_at text not null
+              );
             """)
+            try:
+                db.execute("alter table subscriptions add column version_id text")
+            except sqlite3.OperationalError:
+                pass
 
     def save_ai_evaluation(self, record: dict[str, Any]) -> None:
         with self._connect() as db:
@@ -229,10 +243,10 @@ class PaperRepository:
             db.execute("insert into publication_jobs values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", tuple(record.values()))
         return record
 
-    def save_subscription(self, strategy_id: str, follower_id: str, environment: str) -> dict[str, Any]:
-        record = {"id": "sub_" + uuid.uuid4().hex[:20], "strategy_id": strategy_id, "follower_id": follower_id, "status": "active", "environment": environment, "created_at": utc_now(), "cancelled_at": None}
+    def save_subscription(self, strategy_id: str, follower_id: str, environment: str, version_id: str | None = None) -> dict[str, Any]:
+        record = {"id": "sub_" + uuid.uuid4().hex[:20], "strategy_id": strategy_id, "follower_id": follower_id, "status": "active", "environment": environment, "created_at": utc_now(), "version_id": version_id, "cancelled_at": None}
         with self._connect() as db:
-            db.execute("insert into subscriptions values (?, ?, ?, ?, ?, ?, ?)", tuple(record.values()))
+            db.execute("insert into subscriptions (id, strategy_id, follower_id, status, environment, created_at, version_id, cancelled_at) values (?, ?, ?, ?, ?, ?, ?, ?)", tuple(record.values()))
             return record
 
     def cancel_subscription(self, strategy_id: str, follower_id: str) -> dict[str, Any] | None:
@@ -269,3 +283,39 @@ class PaperRepository:
         if not row:
             return None
         return {**json.loads(row["payload"]), "follower_id": follower_id, "updated_at": row["updated_at"]}
+
+    def find_autonomous_evaluation(self, observation_key: str) -> dict[str, Any] | None:
+        with self._connect() as db:
+            row = db.execute("select payload from autonomous_evaluations where observation_key = ?", (observation_key,)).fetchone()
+        return json.loads(row["payload"]) if row else None
+
+    def save_autonomous_evaluation(self, record: dict[str, Any]) -> dict[str, Any]:
+        with self._connect() as db:
+            db.execute("insert or ignore into autonomous_evaluations values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (record["id"], record["strategy_id"], record["version_id"], record["observation_key"], record["decision"], record["status"], record["source"], record["candle_timestamp"], json.dumps(record, sort_keys=True), record["created_at"]))
+        return record
+
+    def save_autonomous_signal(self, signal_id: str, strategy_id: str, version_id: str, payload: dict[str, Any], created_at: str) -> dict[str, Any]:
+        with self._connect() as db:
+            db.execute("insert or ignore into autonomous_signals values (?, ?, ?, ?, ?, ?)", (signal_id, strategy_id, version_id, payload["observation_key"], json.dumps(payload, sort_keys=True), created_at))
+        return payload
+
+    def list_subscriptions_for_strategy(self, strategy_id: str) -> list[dict[str, Any]]:
+        with self._connect() as db:
+            rows = db.execute("select * from subscriptions where strategy_id = ?", (strategy_id,)).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_autonomous_signals(self, strategy_ids: list[str]) -> list[dict[str, Any]]:
+        if not strategy_ids:
+            return []
+        placeholders = ",".join("?" for _ in strategy_ids)
+        with self._connect() as db:
+            rows = db.execute(f"select payload from autonomous_signals where strategy_id in ({placeholders}) order by created_at desc", strategy_ids).fetchall()
+        return [json.loads(row["payload"]) for row in rows]
+
+    def list_autonomous_evaluations(self, strategy_ids: list[str]) -> list[dict[str, Any]]:
+        if not strategy_ids:
+            return []
+        placeholders = ",".join("?" for _ in strategy_ids)
+        with self._connect() as db:
+            rows = db.execute(f"select payload from autonomous_evaluations where strategy_id in ({placeholders}) order by created_at desc", strategy_ids).fetchall()
+        return [json.loads(row["payload"]) for row in rows]

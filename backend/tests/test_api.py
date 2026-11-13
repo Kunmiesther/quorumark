@@ -16,6 +16,16 @@ def test_health_is_paper_only():
     assert response.json()["paper_only"] is True
 
 
+def test_autonomous_scheduler_requires_server_only_token(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(main, "repository", PaperRepository(str(tmp_path / "scheduler.db")))
+    client = TestClient(app)
+    assert client.post("/v1/internal/evaluations/run").status_code == 401
+    monkeypatch.setenv("QUORUMARK_EVALUATION_SCHEDULER_TOKEN", "scheduler-test-token")
+    response = client.post("/v1/internal/evaluations/run", headers={"x-quorumark-scheduler-token": "scheduler-test-token"})
+    assert response.status_code == 200
+    assert response.json()["paper_only"] is True
+
+
 def test_health_reports_sanitized_near_ai_configuration(monkeypatch):
     monkeypatch.setenv("AI_PROVIDER", "near_ai")
     monkeypatch.setenv("NEAR_AI_API_KEY", "server-only-test-key")

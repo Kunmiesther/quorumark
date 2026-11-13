@@ -76,7 +76,7 @@ cancel the subscription.
 
 AI analysis is an explicitly configured, schema-validated aid around strategy
 research and inspection; when unavailable, the product says so. Quorumark
-does not claim autonomous trading or fabricated performance. The Python engine produces the genuine backtest and
+does not claim autonomous real-money trading or fabricated performance. The Python engine produces the genuine backtest and
 paper-execution results. Supabase stores authenticated identities, ownership,
 versions, subscriptions, and evidence with server-side authorization. NEAR
 Wallet Selector handles testnet authentication, and the narrow Rust contract
@@ -93,7 +93,21 @@ receiver, method arguments, and final receipt. Until then the product displays
 
 Evidence recording is creator-authorized: the authenticated creator's NEAR
 wallet signs the ordinary `record_publication` FunctionCall. No backend owner
-signer, worker, private key, or scheduler is required.
+signer is exposed to the browser.
+
+Autonomous paper evaluation is a separate, paper-only service. Each published
+version is compiled into a small validated executable specification (symbol,
+candle interval, EMA entry/exit rule, and hard risk limits). An hourly GitHub
+Actions schedule calls the protected `POST /v1/internal/evaluations/run`
+endpoint with `QUORUMARK_EVALUATION_SCHEDULER_TOKEN`. Completed public candles
+are validated, evaluated once per strategy-version-observation, and any BUY or
+SELL signal is distributed only to active, version-pinned subscriptions. The
+existing follower risk engine then records accepted or rejected paper
+decisions with fees, slippage, and provenance. Configure the token as a GitHub
+Actions secret and apply `20261113100000_autonomous_evaluations.sql` plus
+`20261113110000_subscription_version_pinning.sql` to Supabase before calling
+this production-ready path. The Follower Desk labels fixture practice signals
+separately from autonomous market-data signals.
 
 For a credential-safe demo, use the public landing page, inspect the sample in
 Marketplace, run the Studio simulation, open Follower to apply risk controls,

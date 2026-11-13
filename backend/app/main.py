@@ -3,9 +3,10 @@ import base64
 import httpx
 import json
 import logging
+import hmac
 from datetime import datetime, timezone
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .ai import AIProviderError, AIUnavailableError, StrategyProposal, analyze_strategy, configuration_status, evaluate_agent, generate_strategy_proposal
@@ -18,6 +19,7 @@ from .repository import PaperRepository
 from .supabase_repository import SupabaseRepository
 from .security import require_verified_identity
 from .publication_evidence import PUBLICATION_SCHEMA_VERSION, publication_commitment
+from .strategy_runtime import ExecutableStrategy, run_autonomous_evaluations
 from .marketplace import (
     PolicyRequest,
     StrategyDraftRequest,
@@ -104,6 +106,41 @@ def health() -> dict[str, object]:
     }
 
 
+def require_scheduler_token(token: str | None) -> None:
+    expected = os.getenv("QUORUMARK_EVALUATION_SCHEDULER_TOKEN", "").strip()
+    if not expected or not token or not hmac.compare_digest(token, expected):
+        raise HTTPException(status_code=401, detail="Authorized scheduler token required")
+
+
+@app.post("/v1/internal/evaluations/run")
+def run_scheduled_evaluations(x_quorumark_scheduler_token: str | None = Header(default=None)) -> dict[str, object]:
+    require_scheduler_token(x_quorumark_scheduler_token)
+    try:
+        return run_autonomous_evaluations(repository, market_fetcher=fetch_historical)
+    except Exception as error:
+        logger.error("Autonomous evaluation run failed error_type=%s", type(error).__name__)
+        raise HTTPException(status_code=503, detail="The scheduled evaluation could not complete") from error
+
+
+@app.get("/v1/follower/agent-status")
+def follower_agent_status(identity: str = Depends(require_verified_identity)) -> dict[str, object]:
+    subscriptions = [item for item in repository.list_subscriptions(identity) if item.get("status") == "active"]
+    strategy_ids = [str(item["strategy_id"]) for item in subscriptions]
+    evaluations = repository.list_autonomous_evaluations(strategy_ids)
+    signals = repository.list_autonomous_signals(strategy_ids)
+    latest = evaluations[0] if evaluations else None
+    status = "awaiting_next_candle"
+    if latest and latest.get("status") == "failed":
+        status = "evaluation_failed"
+    elif latest and latest.get("candle_timestamp"):
+        try:
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(str(latest["candle_timestamp"]).replace("Z", "+00:00"))).total_seconds()
+            status = "stale_data" if age > 172_800 else "active"
+        except ValueError:
+            status = "evaluation_failed"
+    return {"status": status, "last_evaluation": latest, "latest_signal": signals[0] if signals else None, "subscriptions": subscriptions, "paper_only": True}
+
+
 EVIDENCE_DEPLOYMENT_OWNER = "estarkunmi.testnet"
 EVIDENCE_DEPLOYMENT_ACCOUNT = EVIDENCE_DEPLOYMENT_OWNER
 
@@ -176,7 +213,7 @@ def paper_execution(request: PaperExecutionRequest, identity: str = Depends(requ
         raise HTTPException(status_code=403, detail="An active subscription to this strategy is required")
     versions = repository.list_versions(strategy["id"])
     version = next((item for item in versions if item.get("version") == request.signal.strategy_version or str(item.get("id")) == request.signal.strategy_version_id), None)
-    if not version:
+    if not version or (subscription.get("version_id") and str(subscription.get("version_id")) != str(version.get("id"))):
         raise HTTPException(status_code=409, detail="The signal is not bound to a published strategy version")
     bound_request = request.model_copy(update={"follower_id": identity, "signal": request.signal.model_copy(update={"strategy_version_id": str(version.get("id"))})})
     return process_paper_signal(bound_request, repository)
@@ -265,7 +302,12 @@ def create_version(strategy_id: str, request: StrategyVersionRequest, identity: 
         raise HTTPException(status_code=404, detail="Strategy not found")
     versions = repository.list_versions(strategy["id"])
     existing = next((item for item in versions if item.get("version") == request.version), None)
-    requested_hash = request.evidence_hash or evidence_hash(request.definition)
+    try:
+        executable = ExecutableStrategy.from_version(strategy, request.definition)
+    except (TypeError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=f"The strategy rules could not be compiled safely: {error}") from error
+    canonical_definition = {**request.definition, **executable.as_definition()}
+    requested_hash = request.evidence_hash or evidence_hash(canonical_definition)
     if existing:
         if requested_hash and existing.get("content_hash") != requested_hash:
             if strategy.get("status") != "published":
@@ -278,7 +320,7 @@ def create_version(strategy_id: str, request: StrategyVersionRequest, identity: 
             existing = None
         else:
             return existing
-    version = repository.save_strategy_version(strategy["id"], request.version, request.definition, request.backtest_id, request.backtest_metrics, requested_hash, datetime.now(timezone.utc).isoformat())
+    version = repository.save_strategy_version(strategy["id"], request.version, canonical_definition, request.backtest_id, request.backtest_metrics, requested_hash, datetime.now(timezone.utc).isoformat())
     updated = repository.update_strategy(strategy["id"], identity, current_version=request.version) if strategy.get("status") != "published" else strategy
     return {**version, "strategy": updated or strategy}
 
@@ -419,8 +461,11 @@ def subscribe(request: SubscriptionRequest, identity: str = Depends(require_loca
     strategy = repository.get_strategy(request.strategy_id)
     if not strategy or strategy["status"] != "published":
         raise HTTPException(status_code=404, detail="Published strategy not found")
+    version = next((item for item in repository.list_versions(strategy["id"]) if item.get("version") == strategy.get("current_version")), None)
+    if not version:
+        raise HTTPException(status_code=409, detail="This strategy has no published version to follow")
     try:
-        return repository.save_subscription(strategy["id"], identity, request.environment)
+        return repository.save_subscription(strategy["id"], identity, request.environment, str(version["id"]))
     except Exception as error:
         if "unique" in str(error).lower():
             existing = next((item for item in repository.list_subscriptions(identity) if item["strategy_id"] == strategy["id"] and item["status"] == "active"), None)

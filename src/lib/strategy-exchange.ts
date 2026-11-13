@@ -225,6 +225,7 @@ export type ExchangeState = {
   policy: RiskPolicy;
   wallet?: string;
   subscription?: { strategyId: string; strategyVersionId?: string; status: "active" | "expired"; receipt: string };
+  agentStatus?: { status: "active" | "paused" | "awaiting_next_candle" | "stale_data" | "evaluation_failed"; last_evaluation?: { decision?: string; candle_timestamp?: string; source?: string }; latest_signal?: { decision?: string; candle_timestamp?: string; source?: string } };
 };
 export function loadExchangeState(): ExchangeState {
   const wallet = getWalletSession()?.address;

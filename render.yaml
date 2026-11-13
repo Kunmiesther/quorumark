@@ -50,6 +50,8 @@ services:
         value: paper
       - key: QUORUMARK_ALLOW_LIVE_EXECUTION
         value: "false"
+      - key: QUORUMARK_EVALUATION_SCHEDULER_TOKEN
+        sync: false
 
   - type: web
     name: quorumark-web

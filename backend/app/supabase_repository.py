@@ -120,9 +120,9 @@ class SupabaseRepository:
         rows = self._request("POST", "strategy_exchange_publication_jobs", body=body, prefer="resolution=merge-duplicates,return=representation")
         return rows[0] if rows else body
 
-    def save_subscription(self, strategy_id: str, follower_id: str, environment: str) -> dict[str, Any]:
+    def save_subscription(self, strategy_id: str, follower_id: str, environment: str, version_id: str | None = None) -> dict[str, Any]:
         now = datetime.now(timezone.utc)
-        body = {"strategy_id": strategy_id, "follower_id": follower_id, "status": "active", "environment": environment, "starts_at": now.isoformat(), "expires_at": (now + timedelta(days=30)).isoformat()}
+        body = {"strategy_id": strategy_id, "version_id": version_id, "follower_id": follower_id, "status": "active", "environment": environment, "starts_at": now.isoformat(), "expires_at": (now + timedelta(days=30)).isoformat()}
         rows = self._request("POST", "strategy_exchange_subscriptions", body=body, prefer="resolution=merge-duplicates,return=representation")
         return rows[0] if rows else body
 
@@ -147,3 +147,32 @@ class SupabaseRepository:
     def get_policy(self, follower_id: str) -> dict[str, Any] | None:
         rows = self._request("GET", "strategy_exchange_risk_policies", params={"follower_id": f"eq.{follower_id}", "select": "*", "limit": "1"})
         return rows[0] if rows else None
+
+    def find_autonomous_evaluation(self, observation_key: str) -> dict[str, Any] | None:
+        rows = self._request("GET", "strategy_exchange_evaluations", params={"observation_key": f"eq.{observation_key}", "select": "payload", "limit": "1"})
+        return rows[0].get("payload") if rows else None
+
+    def save_autonomous_evaluation(self, record: dict[str, Any]) -> dict[str, Any]:
+        body = {key: record[key] for key in ("id", "strategy_id", "version_id", "observation_key", "decision", "status", "source", "candle_timestamp", "payload", "created_at")}
+        self._request("POST", "strategy_exchange_evaluations", body=body, prefer="resolution=ignore-duplicates,return=representation")
+        return record
+
+    def save_autonomous_signal(self, signal_id: str, strategy_id: str, version_id: str, payload: dict[str, Any], created_at: str) -> dict[str, Any]:
+        body = {"id": signal_id, "strategy_id": strategy_id, "version_id": version_id, "payload": payload, "created_at": created_at}
+        self._request("POST", "strategy_exchange_signals", body=body, prefer="resolution=ignore-duplicates,return=representation")
+        return payload
+
+    def list_subscriptions_for_strategy(self, strategy_id: str) -> list[dict[str, Any]]:
+        return self._request("GET", "strategy_exchange_subscriptions", params={"strategy_id": f"eq.{strategy_id}", "select": "*"})
+
+    def list_autonomous_signals(self, strategy_ids: list[str]) -> list[dict[str, Any]]:
+        if not strategy_ids:
+            return []
+        rows = self._request("GET", "strategy_exchange_signals", params={"strategy_id": f"in.({','.join(strategy_ids)})", "select": "payload", "order": "created_at.desc"})
+        return [row.get("payload", {}) for row in rows]
+
+    def list_autonomous_evaluations(self, strategy_ids: list[str]) -> list[dict[str, Any]]:
+        if not strategy_ids:
+            return []
+        rows = self._request("GET", "strategy_exchange_evaluations", params={"strategy_id": f"in.({','.join(strategy_ids)})", "select": "payload", "order": "created_at.desc"})
+        return [row.get("payload", {}) for row in rows]

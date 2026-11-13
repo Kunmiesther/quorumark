@@ -1,0 +1,20 @@
+name: Quorumark autonomous paper evaluation
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger authorized paper evaluation
+        env:
+          EVALUATION_URL: https://quorumark-api.onrender.com/v1/internal/evaluations/run
+          SCHEDULER_TOKEN: ${{ secrets.QUORUMARK_EVALUATION_SCHEDULER_TOKEN }}
+        run: |
+          test -n "$SCHEDULER_TOKEN"
+          curl --fail-with-body --max-time 90 \
+            -X POST "$EVALUATION_URL" \
+            -H "X-Quorumark-Scheduler-Token: $SCHEDULER_TOKEN"
