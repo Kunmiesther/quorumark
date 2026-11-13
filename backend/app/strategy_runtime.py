@@ -111,6 +111,21 @@ def _default_policy(strategy: dict[str, Any]) -> RiskPolicy:
     return RiskPolicy(capital=10_000, max_trade=1_500, max_position=2_500, max_loss=250, approved_assets=strategy.get("supported_assets") or ["BTC"], paused=False)
 
 
+def _subscription_is_active(subscription: dict[str, Any], now: datetime) -> bool:
+    if subscription.get("status") != "active":
+        return False
+    expires_at = subscription.get("expires_at")
+    if not expires_at:
+        return True
+    try:
+        expiry = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+        return expiry > now
+    except ValueError:
+        return False
+
+
 def run_autonomous_evaluations(
     repository: PaperRepository,
     *,
@@ -121,6 +136,7 @@ def run_autonomous_evaluations(
     current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     summary: dict[str, Any] = {"evaluated": 0, "skipped": 0, "signals": 0, "paper_decisions": 0, "errors": [], "paper_only": True}
     for strategy in repository.list_strategies(published_only=True)[:limit]:
+        version: dict[str, Any] | None = None
         try:
             version = next((item for item in repository.list_versions(strategy["id"]) if item.get("version") == strategy.get("current_version")), None)
             if not version:
@@ -160,7 +176,7 @@ def run_autonomous_evaluations(
             summary["signals"] += 1
             side = "long" if result["decision"] == "BUY" else "short"
             for subscription in repository.list_subscriptions_for_strategy(strategy["id"]):
-                if subscription.get("status") != "active":
+                if not _subscription_is_active(subscription, current):
                     continue
                 follower_id = str(subscription["follower_id"])
                 policy_data = repository.get_policy(follower_id) or _default_policy(strategy).model_dump()
@@ -176,5 +192,28 @@ def run_autonomous_evaluations(
                 process_paper_signal(request, repository)
                 summary["paper_decisions"] += 1
         except Exception as error:
+            if version and version.get("id"):
+                failure_key = hashlib.sha256(canonical_json({
+                    "strategy_id": strategy.get("id"),
+                    "version_id": str(version["id"]),
+                    "failure_hour": current.replace(minute=0, second=0, microsecond=0).isoformat(),
+                }).encode()).hexdigest()
+                if not repository.find_autonomous_evaluation(failure_key):
+                    failure_status = "stale" if "stale" in str(error).lower() else "failed"
+                    try:
+                        repository.save_autonomous_evaluation({
+                            "id": "eval_" + failure_key[:28],
+                            "strategy_id": strategy["id"],
+                            "version_id": str(version["id"]),
+                            "observation_key": failure_key,
+                            "decision": "NO_ACTION",
+                            "status": failure_status,
+                            "source": "autonomous_market_data",
+                            "candle_timestamp": current.isoformat(),
+                            "payload": {"error_type": type(error).__name__, "message": str(error)},
+                            "created_at": current.isoformat(),
+                        })
+                    except Exception:
+                        pass
             summary["errors"].append({"strategy_id": strategy.get("id"), "error": str(error)})
     return summary

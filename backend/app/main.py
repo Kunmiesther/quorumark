@@ -132,6 +132,8 @@ def follower_agent_status(identity: str = Depends(require_verified_identity)) ->
     status = "awaiting_next_candle"
     if latest and latest.get("status") == "failed":
         status = "evaluation_failed"
+    elif latest and latest.get("status") == "stale":
+        status = "stale_data"
     elif latest and latest.get("candle_timestamp"):
         try:
             age = (datetime.now(timezone.utc) - datetime.fromisoformat(str(latest["candle_timestamp"]).replace("Z", "+00:00"))).total_seconds()
