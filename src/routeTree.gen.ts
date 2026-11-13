@@ -21,6 +21,7 @@ import { Route as SubscriptionsRouteImport } from './routes/subscriptions'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as VerificationRouteImport } from './routes/verification'
 import { Route as AdminEvidenceDeploymentRouteImport } from './routes/admin.evidence-deployment'
+import { Route as MarketplaceIndexRouteImport } from './routes/marketplace.index'
 import { Route as MarketplaceSlugRouteImport } from './routes/marketplace.$slug'
 
 const IndexRoute = IndexRouteImport.update({
@@ -83,6 +84,11 @@ const AdminEvidenceDeploymentRoute = AdminEvidenceDeploymentRouteImport.update({
   path: '/admin/evidence-deployment',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MarketplaceIndexRoute = MarketplaceIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MarketplaceRoute,
+} as any)
 const MarketplaceSlugRoute = MarketplaceSlugRouteImport.update({
   id: '/$slug',
   path: '/$slug',
@@ -103,13 +109,13 @@ export interface FileRoutesByFullPath {
   '/verification': typeof VerificationRoute
   '/admin/evidence-deployment': typeof AdminEvidenceDeploymentRoute
   '/marketplace/$slug': typeof MarketplaceSlugRoute
+  '/marketplace/': typeof MarketplaceIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/connect-wallet': typeof ConnectWalletRoute
   '/follower': typeof FollowerRoute
-  '/marketplace': typeof MarketplaceRouteWithChildren
   '/privacy': typeof PrivacyRoute
   '/risk-disclosure': typeof RiskDisclosureRoute
   '/studio': typeof StudioRoute
@@ -118,6 +124,7 @@ export interface FileRoutesByTo {
   '/verification': typeof VerificationRoute
   '/admin/evidence-deployment': typeof AdminEvidenceDeploymentRoute
   '/marketplace/$slug': typeof MarketplaceSlugRoute
+  '/marketplace': typeof MarketplaceIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -134,6 +141,7 @@ export interface FileRoutesById {
   '/verification': typeof VerificationRoute
   '/admin/evidence-deployment': typeof AdminEvidenceDeploymentRoute
   '/marketplace/$slug': typeof MarketplaceSlugRoute
+  '/marketplace/': typeof MarketplaceIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -151,13 +159,13 @@ export interface FileRouteTypes {
     | '/verification'
     | '/admin/evidence-deployment'
     | '/marketplace/$slug'
+    | '/marketplace/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
     | '/connect-wallet'
     | '/follower'
-    | '/marketplace'
     | '/privacy'
     | '/risk-disclosure'
     | '/studio'
@@ -166,6 +174,7 @@ export interface FileRouteTypes {
     | '/verification'
     | '/admin/evidence-deployment'
     | '/marketplace/$slug'
+    | '/marketplace'
   id:
     | '__root__'
     | '/'
@@ -181,6 +190,7 @@ export interface FileRouteTypes {
     | '/verification'
     | '/admin/evidence-deployment'
     | '/marketplace/$slug'
+    | '/marketplace/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -284,6 +294,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminEvidenceDeploymentRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/marketplace/': {
+      id: '/marketplace/'
+      path: '/'
+      fullPath: '/marketplace/'
+      preLoaderRoute: typeof MarketplaceIndexRouteImport
+      parentRoute: typeof MarketplaceRoute
+    }
     '/marketplace/$slug': {
       id: '/marketplace/$slug'
       path: '/$slug'
@@ -296,10 +313,12 @@ declare module '@tanstack/react-router' {
 
 interface MarketplaceRouteChildren {
   MarketplaceSlugRoute: typeof MarketplaceSlugRoute
+  MarketplaceIndexRoute: typeof MarketplaceIndexRoute
 }
 
 const MarketplaceRouteChildren: MarketplaceRouteChildren = {
   MarketplaceSlugRoute: MarketplaceSlugRoute,
+  MarketplaceIndexRoute: MarketplaceIndexRoute,
 }
 
 const MarketplaceRouteWithChildren = MarketplaceRoute._addFileChildren(
