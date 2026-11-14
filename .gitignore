@@ -55,6 +55,7 @@ backtest_artifacts/
 # Generated test/build output is not release source.
 target/
 test-results/
+artifacts/screenshots/
 backend/backend/
 backend/.pytest-release-tmp/
 
