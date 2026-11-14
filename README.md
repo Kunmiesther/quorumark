@@ -1,399 +1,182 @@
 # Quorumark
 
-> An AI-powered marketplace for creating, testing, verifying, and following automated trading strategies.
+Creating an automated trading strategy usually requires several tools: one to define the rules, another to test them, and another to share the results. For someone considering following that strategy, there is an additional question: **how can they tell which version of the rules produced the published results?**
 
-Turning a trading idea into an automated strategy is complicated. Testing whether it works, showing others how it performed, and making it available for people to follow introduces even more challenges.
+**Quorumark is a marketplace where creators can build automated trading strategies with AI, test them using historical market data, and publish strategies for others to explore.** Followers can review simulated performance and choose their own risk limits. NEAR provides an independently inspectable record of the strategy version a creator publishes, without requiring the creator to reveal private trading rules.
 
-Quorumark brings those steps together.
+**[Open Quorumark](https://quorumark-web.onrender.com)** | **[Inspect a NEAR testnet publication](https://testnet.nearblocks.io/txns/FJcHvD37RmFdoaJkiUmKAc1Pyj54X6L2ZPbJUE6427NC)**
 
-Creators can describe trading ideas in everyday language, turn them into editable strategies with AI, test them against historical market data, and make them available through a marketplace. Followers can explore available performance information, inspect verification evidence, and apply their own risk limits.
+![Quorumark marketplace showing available strategies](docs/assets/marketplace-live.png)
 
-A key part of Quorumark is verifying a strategy without exposing its private rules. Using NEAR, creators can establish an independently inspectable record tied to a particular strategy version.
+> **Current scope:** Strategy testing and automated evaluation use simulated trading. Quorumark does not place trades with real money. Historical performance is not a guarantee of future results.
 
-Quorumark was developed for the NEAR Hackathon 2026.
-
-[Launch Quorumark](https://quorumark-web.onrender.com) | Demonstration video: no public URL is configured in this repository.
-
-**Current scope:** Quorumark supports simulated strategy testing and paper-based evaluation. It does not execute real-money trades. Historical results do not guarantee future performance.
+---
 
 ## Try Quorumark
 
-The best way to understand Quorumark is to use it.
+The [public application](https://quorumark-web.onrender.com) is the quickest way to understand the product. This walkthrough identifies the action to take and the result to look for. Some creation and publication actions require account configuration, AI-provider access, or NEAR testnet wallet approval.
 
-The walkthrough below follows the main product experience, from discovering a strategy to creating, testing, and verifying one.
+| Do this | See this |
+| --- | --- |
+| **1. Open Marketplace.** Select an available strategy. | Its description, available simulated performance, and supporting information. |
+| **2. Open Strategy Studio.** Enter a trading idea in ordinary language. | A proposed set of entry, exit, and risk rules that can be reviewed and edited, when AI access is configured. |
+| **3. Change a rule.** Adjust an available entry, exit, or risk setting. | The updated strategy configuration. |
+| **4. Run a historical test.** Use the available market data and testing controls. | Simulated trades, performance figures, and a chart of simulated account value. |
+| **5. Examine the results.** Check drawdown, trade history, fees, and other available metrics. | Information about both simulated returns and the risks and costs behind them. |
+| **6. Open Verification.** Inspect a strategy with published evidence. | Its version-linked commitment and available NEAR testnet details. |
+| **7. Open the follower controls.** Review the available risk settings. | Limits that can be set independently of the strategy creator's preferences. |
+| **8. Open Decisions or Activity.** Inspect recorded evaluations. | Decisions produced by the evaluation system, including cases where it takes no action. |
 
-### A guided walkthrough
+**A sample idea for Strategy Studio:**
 
-| Step | What to do | What you should see |
-|---|---|---|
-| 1. Explore | Open Quorumark and select Marketplace. | A collection of available automated trading strategies. |
-| 2. Examine | Open a strategy that interests you. | Its description, available simulated performance, and supporting information. |
-| 3. Create | Open Strategy Studio and describe a trading idea in plain English. | AI-assisted strategy rules that can be reviewed and edited. |
-| 4. Refine | Adjust the available entry, exit, and risk settings. | An updated strategy configuration reflecting your changes. |
-| 5. Test | Run a historical test using the available market data. | Simulated trades and a performance report. |
-| 6. Investigate | Examine the performance report. | Returns, drawdowns, trading activity, and other available metrics. |
-| 7. Verify | Open the strategy's verification information. | Evidence associated with its recorded strategy version, including NEAR testnet information where available. |
-| 8. Follow | Open the follower controls for an available strategy. | Settings that allow the follower to define independent risk limits. |
-| 9. Review | Visit the available activity or decisions view. | Recorded strategy evaluations and simulated activity. |
+> Create a strategy that uses a moving-average crossover for entry and exit signals. Include a stop-loss and a limit on risk per trade.
 
-Some actions require wallet authorization or an appropriately configured account. The deployed application should identify these requirements before the relevant action.
+The generated rules should be reviewed before testing. The example illustrates the input format; it does not imply the strategy is profitable or that every requested setting will be supported.
 
-For judges: The walkthrough demonstrates the intended end-to-end experience. Features requiring additional setup are identified in the technical instructions below. The public demonstration video provides a guided view of the complete product.
+**You can verify the blockchain integration without signing in.** [Open the recorded NEAR transaction](https://testnet.nearblocks.io/txns/FJcHvD37RmFdoaJkiUmKAc1Pyj54X6L2ZPbJUE6427NC), check its receiver and status, and inspect the `record_publication` call. Publishing a new commitment requires explicit wallet authorization.
 
-### What to look for
+---
 
-Three distinctions are important when evaluating Quorumark:
+## What you can do with Quorumark
 
-- AI creates editable rules, not guaranteed winning strategies. The creator remains responsible for reviewing and adjusting the generated strategy.
+### Create a strategy using AI
 
-- Historical testing is a simulation. Performance figures are produced from defined assumptions and historical data, not from live investment returns.
+Strategy Studio accepts a plain-language trading idea and uses AI to propose structured rules. The creator can inspect and edit the available entry conditions, exit conditions, and risk settings. The output is a strategy proposal, not an instruction to invest or a guarantee of performance.
 
-- NEAR records verifiable evidence of strategy versions. It does not certify a strategy's profitability or guarantee its performance.
+![Strategy Studio with AI-assisted strategy creation](docs/assets/strategy-studio-live.png)
 
-## Why Quorumark exists
+### Test the strategy using historical data
 
-Automated trading tools often separate the people who create strategies from the people who want to use them.
+Quorumark's backtesting engine simulates how the rules would have behaved on historical market data. Results can include simulated returns, trade history, changes in account value, maximum drawdown, fees, and slippage.
 
-A creator may have a promising idea but lack the tools to turn it into a structured strategy. Testing may require another application. Sharing results may mean publishing screenshots that provide little evidence of how they were produced.
+The reference engine uses **next-candle-open execution** to avoid letting a strategy act on market information that was not yet available at the time of its decision. This improves the integrity of the simulation but cannot predict future performance.
 
-For followers, the challenge is different. A strategy may have attractive performance figures, but those figures alone do not establish which version was tested or how much risk following it might involve.
+![Historical backtest and performance results](docs/assets/backtest-live.png)
 
-There is also a legitimate reason creators may not want to disclose everything: the rules behind a strategy can represent significant work.
+### Publish and discover strategies
 
-Quorumark addresses these problems together.
+Creators can make strategies discoverable in the marketplace alongside their descriptions, available simulated results, and verification evidence. They can share information about a strategy without publishing the full private rule set.
 
-It provides a place to develop strategies, examine simulated results, create verifiable records of strategy versions, and make strategies discoverable without requiring creators to publish their private methods.
+![Quorumark marketplace](docs/assets/marketplace-live.png)
 
-Followers retain control over their own risk settings.
+### Set independent follower risk limits
 
-The goal is not to remove uncertainty from trading. It is to make the process of creating, evaluating, and following strategies more accessible and accountable.
+A follower's risk preferences do not have to match the creator's. Quorumark separates strategy rules from the follower's available risk controls within its simulated environment.
 
-## From an idea to an automated strategy
+![Follower risk settings](docs/assets/follower-desk-live.png)
 
-### 1. Create with AI
+### Review automated decisions
 
-Strategy Studio begins with a description rather than a programming language.
+Quorumark can evaluate supported strategies against market data and record the decisions. An evaluation can result in no trade. Such outcomes are retained rather than inventing activity for the demonstration.
 
-A creator can describe a trading approach in plain English. Quorumark uses AI to translate that description into structured rules that the application can work with.
+### Product workflow
 
-Those rules can include entry conditions, exit conditions, and risk parameters.
+![Quorumark product workflow](docs/assets/product-workflow.svg)
 
-The result is not an unchangeable AI recommendation. Creators can inspect and modify the available rules before testing them.
+---
 
-This matters because AI should make strategy development more accessible without hiding the decisions that determine how a strategy behaves.
+## Why Quorumark uses NEAR
 
-![Strategy Studio](docs/assets/strategy-studio-live.png)
+A performance report alone cannot establish whether a strategy's rules have changed since that report was produced. A creator might test one version, publish its results, and later modify the strategy. A follower needs a way to inspect evidence tied to the published version without depending entirely on Quorumark's database.
 
-### 2. Test against historical market data
+**NEAR enables wallet-authorized publication of cryptographic commitments to strategy versions.** This gives Quorumark a record that can be inspected outside the application, while the private trading rules remain off-chain.
 
-An idea that sounds reasonable still needs to be tested.
+The process is:
 
-Quorumark includes a historical testing system that simulates how a strategy would have behaved under specified market conditions.
+1. Quorumark associates a cryptographic commitment with a specific strategy version.
+2. The creator approves publication using a NEAR-compatible wallet.
+3. The evidence contract records the commitment on NEAR testnet.
+4. A reviewer can inspect the transaction and compare its recorded identifiers and commitment with the corresponding evidence in Quorumark.
 
-The simulation accounts for execution assumptions, including trading costs and slippage, rather than treating every trade as free or perfectly executed.
+![Strategy verification interface](docs/assets/verification-live.png)
 
-Its results can include:
+### Inspect the on-chain evidence
 
-- Simulated returns and changes in portfolio value.
-- Maximum drawdown, showing the largest decline from a previous peak.
-- Trading activity, including entries and exits.
-- Fees and other simulated execution costs.
-- A performance chart showing how the simulated account changed over time.
+| Item | Evidence |
+| --- | --- |
+| Network | NEAR Testnet |
+| Contract | [`quorumark-evidence-dedicated.testnet`](https://testnet.nearblocks.io/address/quorumark-evidence-dedicated.testnet) |
+| Recorded transaction | [View publication transaction](https://testnet.nearblocks.io/txns/FJcHvD37RmFdoaJkiUmKAc1Pyj54X6L2ZPbJUE6427NC) |
+| Contract method | `record_publication` |
 
-Quorumark also uses a next-interval execution approach in its reference backtesting logic. A trading decision is not allowed to use information from a future market interval and then pretend the trade happened earlier.
+**Do this:** Open the transaction link, confirm that the receiver is `quorumark-evidence-dedicated.testnet`, and inspect the successful `record_publication` call.
 
-That distinction matters because historical tests can produce misleading results when they allow a strategy to act on information it could not have known.
+**See this:** A blockchain record containing publication data that can be compared with the matching strategy-version evidence shown by Quorumark.
 
-![Historical paper backtest](docs/assets/backtest-live.png)
+The commitment establishes that particular evidence was recorded on-chain. **It does not prove profitability, independently validate private strategy rules, or execute trades.** NEAR is used for publication evidence, not for historical simulation or live trade execution.
 
-### 3. Improve the strategy
+---
 
-A test is useful because it reveals more than a single return figure.
+## How AI is used
 
-Creators can examine how frequently a strategy trades, how its simulated results change over time, and how much risk its behavior introduces.
+Quorumark uses AI to translate natural-language strategy descriptions into editable proposals and to support strategy refinement and analysis. The application records provider and model information for supported AI requests.
 
-They can then adjust the available strategy settings and test again.
+The repository implements two selectable AI providers:
 
-This creates a repeatable development process:
+| Provider | Configuration identified in the repository | What it does |
+| --- | --- | --- |
+| **NEAR AI Cloud** | `AI_PROVIDER=near_ai`, `NEAR_AI_MODEL=google/gemini-2.5-flash-lite`, endpoint `https://cloud-api.near.ai/v1` in the checked-in Render configuration | Handles strategy proposals, refinement, and analysis through the configured provider interface. |
+| **Google Gemini** | Alternative provider selected through server configuration. Repository examples and tests reference `gemini-3.5-flash` and `gemini-3.5-flash-lite`. | Supports the same AI workflows when selected and supplied with valid credentials. |
 
-> Describe an idea → Review the rules → Test → Examine the results → Refine
+The providers are **configuration alternatives**, not an automatic fallback chain. Credentials remain on the server. An unavailable provider returns an error rather than a fabricated result.
 
-The objective is to make strategy development understandable and measurable, not to suggest that a successful historical test guarantees a successful future outcome.
+**NEAR AI Cloud and NEAR blockchain have separate roles:** NEAR AI Cloud serves AI inference requests; the NEAR testnet contract records strategy-version commitments.
 
-## A marketplace for strategies, not trading tips
+---
 
-Quorumark is designed around automated strategies as reusable products.
+## Implementation and verification
 
-A trading tip tells someone what action to consider at a particular moment. An automated strategy defines rules for evaluating market conditions and producing decisions over time.
+This section is for technical reviewers who want to inspect the code or reproduce the available checks.
 
-That difference is central to Quorumark.
+### Technology stack
 
-Creators can make strategies available for discovery alongside their descriptions, available simulated performance, and verification evidence.
+| Component | Implementation |
+| --- | --- |
+| Web application | React, TypeScript, TanStack |
+| AI inference | NEAR AI Cloud and Google Gemini |
+| Historical testing and evaluations | Python, FastAPI |
+| Data storage | Supabase, PostgreSQL, row-level security |
+| Market data | Coinbase and other supported integrations |
+| Blockchain evidence | NEAR testnet smart contract |
+| Wallet authorization | NEAR Wallet Selector |
+| Scheduled evaluations | Protected scheduler and application services |
 
-Followers can compare the information provided, explore a strategy's characteristics, and decide whether its approach suits their own requirements.
+### Architecture
 
-![Marketplace discovery](docs/assets/marketplace-live.png)
+The application handles AI requests, strategy logic, market data, backtesting, and follower settings off-chain. The NEAR contract stores selected publication evidence.
 
-## Followers keep their own risk controls
+![Quorumark technical architecture](docs/assets/technical-architecture.svg)
 
-Following a strategy should not require accepting every risk preference chosen by its creator.
+### Run locally
 
-Quorumark separates the creator's strategy rules from the follower's available risk controls.
+The repository includes `.env.example` and deployment configuration in `render.yaml`. Local development requires Node.js/npm and Python 3.12. Database-backed features require a configured Supabase/PostgreSQL project. AI inference and new on-chain publications require their respective credentials or wallet approval.
 
-This allows followers to establish their own limits within the supported paper-trading environment.
+**Frontend and local launcher (PowerShell):**
 
-The creator defines the strategy. The follower controls the risk settings available to their own simulated participation.
-
-That separation is an important part of the marketplace's design.
-
-![Follower risk controls](docs/assets/follower-desk-live.png)
-
-## Why NEAR matters
-
-There is a problem that historical performance reports cannot solve on their own.
-
-Imagine a creator tests a strategy, shares the results, and later changes the underlying rules.
-
-How can someone establish which strategy version was associated with the original publication?
-
-And how can the creator provide evidence without revealing the private trading logic?
-
-Quorumark uses NEAR to address this specific problem.
-
-### Verifiable strategy versions
-
-When a strategy version is prepared for verification, Quorumark creates a cryptographic commitment associated with that version.
-
-A creator authorizes the relevant action using a NEAR wallet. The commitment is then recorded through a smart contract on NEAR testnet.
-
-This provides a record that can be inspected independently of Quorumark's own interface.
-
-If a strategy is revised, the revised version can be associated with a separate commitment.
-
-The underlying strategy rules do not need to be published on the blockchain.
-
-![NEAR verification view](docs/assets/verification-live.png)
-
-### What this proves — and what it doesn't
-
-| NEAR provides | NEAR does not provide |
-|---|---|
-| An independently inspectable on-chain record | A guarantee that a strategy is profitable |
-| Evidence associated with a particular strategy version | Proof that a historical simulation predicts future returns |
-| Wallet-authorized publication of a commitment | Real-money trade execution |
-| A way to check recorded commitments without revealing private strategy rules | Public access to the creator's private strategy logic |
-
-This distinction is intentional.
-
-Quorumark uses blockchain where an independently inspectable record adds value, rather than putting every part of the trading system on-chain.
-
-### NEAR implementation
-
-**Network:** NEAR Testnet
-
-**Evidence contract:** `quorumark-evidence-dedicated.testnet`
-
-**Contract explorer:** https://testnet.nearblocks.io/address/quorumark-evidence-dedicated.testnet
-
-The contract address identifies the testnet integration. A successful strategy-specific verification also requires a corresponding commitment or transaction record.
-
-The confirmed publication transaction is [FJcHvD37RmFdoaJkiUmKAc1Pyj54X6L2ZPbJUE6427NC](https://testnet.nearblocks.io/txns/FJcHvD37RmFdoaJkiUmKAc1Pyj54X6L2ZPbJUE6427NC). To verify it independently, open the transaction, confirm the receiver is `quorumark-evidence-dedicated.testnet`, inspect the successful `record_publication` call, and compare its strategy/version identifiers and commitment with Quorumark's evidence view. A new publication requires the creator's explicit NEAR testnet wallet approval.
-
-### Why not just store everything in the application?
-
-An application database can store strategy versions, results, and publication records. But those records are controlled by the application itself.
-
-An on-chain commitment creates an additional record outside that database.
-
-This does not eliminate every trust assumption. It does make the existence of a particular recorded commitment independently inspectable.
-
-That is the role NEAR plays in Quorumark.
-
-## The AI behind Quorumark
-
-Quorumark uses AI to make strategy creation more accessible and to support the application's automated workflows.
-
-The most visible example is Strategy Studio, where a natural-language trading idea can be translated into structured, editable rules.
-
-The platform's AI integration also includes support for the providers configured in its implementation.
-
-### NEAR AI and Google Gemini
-
-Quorumark's AI integration includes NEAR AI Cloud and Google Gemini.
-
-These services must be distinguished from the NEAR blockchain integration described above.
-
-NEAR AI Cloud and Gemini are AI inference services. The NEAR testnet smart contract is used to record strategy evidence.
-
-They serve different purposes.
-
-The exact model used for a request, provider selection behavior, and any fallback arrangements depend on the application's verified configuration.
-
-In the checked-in Render configuration, `AI_PROVIDER=near_ai` selects NEAR AI Cloud at `https://cloud-api.near.ai/v1` with `NEAR_AI_MODEL=google/gemini-2.5-flash-lite`. Strategy proposals, refinement, and analysis use the selected provider abstraction and persist provider/model provenance. Google Gemini is also implemented as a selectable provider using the server-only `AI_MODEL` variable; repository examples and tests use `gemini-3.5-flash` and `gemini-3.5-flash-lite`. This is an alternative configuration, not an automatic fallback. Provider credentials remain server-side, and unavailable providers return an error rather than fabricated output.
-
-AI-generated strategy rules should always be reviewed before use. The presence of an AI model does not establish that its output is correct or financially reliable.
-
-## How the pieces work together
-
-Quorumark combines several connected capabilities.
-
-A creator begins with an idea. AI assists in turning that idea into rules. Historical testing produces simulated performance information. NEAR can record evidence associated with a particular version. The marketplace makes strategies discoverable, while followers maintain independent risk settings.
-
-```mermaid
-flowchart LR
-  Idea[Trading idea] --> AI[AI creates editable rules]
-  AI --> Test[Historical paper test]
-  Test --> Version[Strategy version]
-  Version --> Near[NEAR evidence]
-  Near --> Market[Marketplace]
-  Market --> Follow[Follower sets personal limits]
-  Follow --> Paper[Simulated activity]
+```powershell
+npm ci
+Copy-Item .env.example .env.local
+npm run dev:local
 ```
 
-The application keeps the trading logic, historical simulations, marketplace information, and follower controls in its off-chain systems.
-
-NEAR is used for the specific evidence commitments described above.
-
-This separation allows Quorumark to preserve private strategy logic while making selected publication evidence independently inspectable.
-
-## Automated evaluation and paper trading
-
-Quorumark includes automated strategy evaluation using market data.
-
-The evaluation process examines available market conditions and records decisions produced by the supported strategy logic.
-
-A decision to take no action is still a meaningful result. The system should not manufacture trades merely to make a demonstration look active.
-
-Recorded evaluations can be inspected through the relevant activity and decision interfaces.
-
-At this stage, execution is simulated.
-
-Quorumark does not currently place real-money trades on behalf of followers.
-
-The paper-based environment is intended to demonstrate strategy behavior, execution assumptions, and risk controls without representing simulated results as actual investment performance.
-
-## Technology stack
-
-Quorumark combines a web application, AI services, a strategy evaluation system, data storage, and NEAR testnet verification.
-
-| Component | Technology | Role |
-|---|---|---|
-| Web application | React, TypeScript | Marketplace, Strategy Studio, performance views, and follower controls |
-| AI services | NEAR AI Cloud, Google Gemini | AI-assisted workflows; exact model usage requires configuration verification |
-| Strategy testing | Python, FastAPI | Historical testing, simulated execution, and strategy evaluation |
-| Data storage | Supabase / PostgreSQL | Application data and related records |
-| Market data | Coinbase public market data | Market information used by supported evaluation workflows |
-| Blockchain | NEAR Testnet | Independently inspectable strategy-version commitments |
-| Wallet integration | NEAR-compatible wallets | Wallet authorization for supported blockchain actions |
-| Testing | Frontend and backend automated tests | Verification of implemented behavior |
-
-For the full implementation, see the technical architecture and local development sections below.
-
-## Technical architecture
-
-The main application is organized around several responsibilities.
-
-The web application provides the interface for strategy creators and followers.
-
-The AI integration converts supported natural-language requests into structured outputs that the application can process.
-
-The strategy testing and evaluation services handle historical simulations, execution assumptions, and recorded decisions.
-
-The database stores application records, strategy information, and related state.
-
-The NEAR integration handles wallet-authorized evidence commitments and inspection of the resulting blockchain records.
-
-```mermaid
-flowchart TB
-  Frontend[React / TanStack frontend] --> Services[FastAPI application services]
-  Services --> AI[NEAR AI Cloud or Gemini]
-  Services --> Data[Coinbase, Binance, or Kraken market data]
-  Services --> Engine[Backtest and paper-execution engine]
-  Services --> Database[(Supabase / PostgreSQL + RLS)]
-  Frontend --> Wallet[NEAR Wallet Selector]
-  Wallet --> Contract[NEAR testnet evidence contract]
-  Services -. RPC confirmation .-> Contract
-  Scheduler[Protected GitHub Actions scheduler] --> Services
-  subgraph OffChain[Off-chain application]
-    Frontend
-    Services
-    AI
-    Data
-    Engine
-    Database
-    Scheduler
-  end
-  subgraph OnChain[On-chain evidence only]
-    Wallet
-    Contract
-  end
-```
-
-The architecture diagram should distinguish the application's off-chain components from its on-chain evidence layer.
-
-The blockchain does not run the historical backtesting engine or execute live trades.
-
-## Run Quorumark locally
-
-This section is intended for developers and technical reviewers who want to inspect the implementation.
-
-### Prerequisites
-
-The project uses a JavaScript frontend, a Python service, a configured database, and optional external integrations.
-
-Review .env.example for the complete list of supported environment variables.
-
-Do not commit private API keys, database credentials, wallet secrets, or production environment files.
-
-### Installation and startup
-
-Install frontend dependencies with `npm ci`, copy `.env.example` to `.env.local`, then use `npm run dev:local` for the local launcher. The manual split setup is:
+**Alternatively, start the backend separately:**
 
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r backend\requirements.txt
 python -m uvicorn app.main:app --reload --app-dir backend --port 8000
+```
+
+Then start the frontend in another terminal:
+
+```powershell
 npm run dev
 ```
 
-Set `VITE_PYTHON_BACKEND_URL=http://127.0.0.1:8000`. For hosted persistence, apply the Supabase migrations to the intended project without resetting it. Production uses the Render services described by `render.yaml`.
+Set `VITE_PYTHON_BACKEND_URL=http://127.0.0.1:8000` for the local backend connection. Apply the repository's Supabase migrations to the intended database when persistent features are needed. Do not commit API keys or wallet secrets.
 
-Document the following separately:
-
-- Install frontend dependencies.
-- Configure the environment variables.
-- Configure the database.
-- Start the frontend.
-- Install and start the Python service.
-- Run the automated tests.
-- Build the production application.
-
-Do not require live API credentials for tests that are designed to run with local fixtures.
-
-### AI configuration
-
-Explain which environment variables select the AI provider, which model identifiers are supported, and which features require externally configured credentials.
-
-Never include actual API keys in the README.
-
-### NEAR configuration
-
-The current blockchain integration targets NEAR testnet.
-
-Local testing of wallet-authorized evidence publication may require a compatible testnet wallet and appropriate testnet resources.
-
-The README should distinguish read-only verification of existing evidence from actions that require publishing a new commitment.
-
-### Testing and reproducibility
-
-Quorumark's implementation should be evaluated through both automated tests and visible product behavior.
-
-#### Automated tests
-
-The repository contains tests covering supported application behavior, strategy processing, and related workflows.
-
-The verified commands for the submitted implementation are:
+### Run the checks
 
 ```powershell
 npx.cmd tsc --noEmit
@@ -403,35 +186,21 @@ cd contracts/publication-evidence
 cargo test
 ```
 
-The last recorded run produced 41 backend tests passed and 5 Rust contract tests passed; the TypeScript check and production build completed successfully. The repository also contains Vitest frontend tests and `tests/e2e/smoke.spec.ts` browser tests. Live wallet approval, private-provider inference, and hosted Supabase checks require the corresponding credentials and human wallet action.
+The previously recorded checks reported **41 passing backend tests**, **5 passing Rust contract tests**, and successful TypeScript and production-build checks. These results are from the project's supplied documentation; they have not been rerun as part of this README edit. The repository also includes Vitest frontend tests and `tests/e2e/smoke.spec.ts` browser tests.
 
-Only report test counts and passing results from tests that have actually been run against the submitted revision.
+### What reviewers can verify
 
-### What judges can verify
+| Claim | Where to check |
+| --- | --- |
+| AI-assisted creation produces editable rules | Strategy Studio and the AI integration |
+| Historical testing models costs and simulated trades | Backtest interface, Python engine, and tests |
+| Strategy-version evidence is recorded on NEAR | [Published testnet transaction](https://testnet.nearblocks.io/txns/FJcHvD37RmFdoaJkiUmKAc1Pyj54X6L2ZPbJUE6427NC) |
+| Followers can set separate risk controls | Follower desk and its implementation |
+| Automated evaluations record decisions | Decisions / Activity and evaluation code |
+| Trading execution is simulated | Paper-execution paths and tests |
 
-| Claim | How to examine it |
-|---|---|
-| AI-assisted strategy creation | Use Strategy Studio and inspect the resulting editable rules |
-| Historical simulation | Run a supported test and inspect the resulting performance report |
-| Trading-cost assumptions | Examine the backtesting implementation and relevant tests |
-| Strategy version evidence | Inspect the recorded NEAR testnet commitment |
-| Marketplace discovery | Browse available strategies and their supporting information |
-| Independent follower controls | Open the follower risk settings |
-| Automated evaluation | Examine recorded decisions and the corresponding implementation |
-| Paper-only execution | Inspect the execution paths and confirm that live-money execution is not enabled |
-
-The public application provides the quickest overview. The source code and tests provide deeper evidence; no public demonstration-video URL is configured in this repository.
-
-Quorumark demonstrates how AI-assisted strategy creation, historical simulation, marketplace discovery, follower risk controls, and independently inspectable blockchain evidence can operate within one application.
-
-The central contribution is not a claim that AI can predict profitable trades.
-
-It is a working approach to making automated trading strategies easier to create and evaluate, while allowing creators to preserve private logic and giving followers more control over their participation.
-
-## Try Quorumark
-
-Demonstration video: no public URL is configured in this repository.
+---
 
 ## License
 
-The current checkout does not contain a `LICENSE` file, so no project license is claimed here.
+See the existing [LICENSE](LICENSE) file.
