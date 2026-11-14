@@ -1,206 +1,246 @@
-# Quorumark Strategy Exchange
+# Quorumark
 
-Quorumark is a NEAR-oriented marketplace for autonomous trading methods. Creators build versioned strategies, attach inspectable paper evidence, and publish private signals. Followers subscribe, apply their own risk rules, and execute independently in a paper or supported testnet environment.
+Turning a trading idea into an automated strategy that can be tested, evaluated, shared, and followed without exposing private rules or giving followers unlimited risk is difficult. Quorumark is an AI-powered marketplace for automated trading strategies: creators build and test versioned strategies, publish inspectable evidence, and followers discover strategies while keeping independent paper-trading limits.
 
-## Product demo
+- Live application: [quorumark-web.onrender.com](https://quorumark-web.onrender.com)
+- Backend health: [quorumark-api.onrender.com/health](https://quorumark-api.onrender.com/health)
+- Repository: [github.com/Kunmiesther/quorumark](https://github.com/Kunmiesther/quorumark)
+- NEAR testnet contract: [quorumark-evidence-dedicated.testnet](https://testnet.nearblocks.io/address/quorumark-evidence-dedicated.testnet)
 
-- `/` presents the Strategy Exchange.
-- `/marketplace` discovers the clearly labelled sample strategy.
-- `/marketplace/aurora-breakout` shows its version, risk, evidence class, equity curve, and sandbox subscription action.
-- `/studio` runs a deterministic reference backtest.
-- `/follower` evaluates a signal against follower policy, deduplicates it, and creates a paper receipt only when accepted.
-- `/subscriptions` shows sandbox entitlement state.
-- `/verification` recomputes metrics from execution records.
-- `/connect-wallet` presents native NEAR first and compatible EVM wallets second.
+## Product overview
 
-The browser can browse the demo without a provisioned database, but paper decisions and executions now go through the Python backend. Local development uses an explicit SQLite ledger at `backend/.data/quorumark.db`; it is not a substitute for applying the Quorumark migrations to a Quorumark-owned Supabase project. Without a configured authenticated database, multi-user persistence remains unavailable.
+Quorumark serves strategy creators and followers. Creators describe strategies in ordinary language, review AI-generated rules, test them against labeled data, save immutable versions, and publish them. Followers browse published versions, inspect limitations and evidence, subscribe in the sandbox, and apply risk rules to their own paper activity.
 
-When running locally, the Python service also exposes the connected marketplace slice: `POST /v1/strategies` creates a creator-owned draft, `/v1/strategies/{id}/versions` records a version, `/v1/strategies/{id}/publish` publishes it, `GET /v1/strategies` lists published records, `POST /v1/subscriptions` creates a sandbox entitlement, and `/v1/follower/policy` stores a follower policy. These protected routes require `x-quorumark-identity` and are intentionally enabled only when `QUORUMARK_PYTHON_ENVIRONMENT=local`; this is a development adapter, not a production authentication mechanism. Hosted use must replace it with a verified Supabase session before enabling writes.
+![Quorumark product overview](docs/assets/product-overview.png)
 
-## Safety and evidence
+## What Quorumark solves
 
-Every execution in this repository is paper, sandbox, or explicitly supported testnet only. There is no live-money execution path. Backtested, paper-traded, testnet-executed, and live-verified evidence classes remain separate; the demo does not claim live performance.
+Strategy creation, historical testing, evidence, distribution, and follower risk controls are usually disconnected. Quorumark puts them in one workflow:
 
-Wallet challenge and signature verification are isolated in the two retained Supabase Edge Functions. Wallet connection alone is not treated as a production trading authorization. Native NEAR wallet selector/session exchange remains configuration-dependent and is surfaced honestly when unavailable.
+```mermaid
+flowchart LR
+  A[Trading idea] --> B[AI-assisted creation]
+  B --> C[Inspect and edit rules]
+  C --> D[Deterministic paper backtest]
+  D --> E[Immutable strategy version]
+  E --> F[NEAR testnet commitment]
+  F --> G[Marketplace discovery]
+  G --> H[Version-pinned subscription]
+  H --> I[Independent follower policy]
+  I --> J[Paper evaluation and execution]
+```
 
-NEAR Intents is isolated in `src/lib/near-intents-adapter.ts`. The current
-sandbox adapter deliberately refuses quote, transaction-preparation, and
-settlement-verification requests. `NEAR_INTENTS_RELAY_URL` and
-`NEAR_INTENTS_API_KEY` are reserved for a future supported relay; empty values
-do not disable any current demo path because no relay is called.
+## Product capabilities
 
-The reference backtest supports two explicit data sources: deterministic,
-labeled fixture candles for offline runs, and a server-side public historical
-OHLCV adapter. Production defaults to Coinbase Exchange's public candles API
-(`MARKET_DATA_PROVIDER=coinbase_public`) with explicit 1-hour, 4-hour, and
-daily granularities. Canonical strategy symbols remain USDT-quoted; the
-adapter records its documented USD market mapping in provenance. Binance and
-Kraken adapters remain available where their public endpoints are accessible.
-If a provider is unreachable, the API returns an error; it never substitutes
-fixture candles or presents history as live performance. `MARKET_DATA_API_KEY`
-is not required by these public adapters.
+### Strategy Studio
 
-The AI strategy-proposal, refinement, analysis, and agent-assessment routes use
-a server-only Gemini GenerateContent API when `AI_PROVIDER=gemini`, a NEAR AI
-Cloud OpenAI-compatible chat API when `AI_PROVIDER=near_ai`, or an
-OpenAI-compatible Responses API when `AI_PROVIDER=openai` or
-`openai_compatible`. All outputs are strictly Pydantic-validated and persisted
-with provider/model provenance. NEAR AI Cloud is optional: configure
-`NEAR_AI_API_KEY`, a model returned by its `/v1/model/list` endpoint, and
-`AI_API_URL=https://cloud-api.near.ai/v1` only after obtaining an authorized
-key. The application does not claim NEAR AI inference until a real request
-succeeds. With AI disabled or unavailable, these routes return an explicit
-unavailable error; they never substitute deterministic text while claiming a
-model was called.
-For the zero-cost Gemini path, create a key in the official Google AI Studio
-(`https://aistudio.google.com/apikey`), without linking a paid billing project,
-then set `AI_PROVIDER=gemini`, `AI_API_KEY` server-side, and
-`AI_MODEL=gemini-3.5-flash`. Free-tier model access and quotas are
-account/region dependent; the API returns an unavailable error when the key,
-quota, or selected model is not eligible. Do not paste the key into the
-browser or commit it.
+`/studio` accepts a plain-English idea. The backend calls the configured server-side AI provider, validates structured output with Pydantic models, stores provider/model provenance, and returns a proposal with a suggested name, market, timing, rules, and risk explanation. Refinement, analysis, and agent assessment use the same provider abstraction. AI is never replaced with fabricated output.
 
-The native NEAR wallet path configures Meteor Wallet and My NEAR Wallet
-directly through Wallet Selector on testnet. `VITE_NEAR_WALLET_CONNECTOR_URL`
-is not used and is intentionally absent from `.env.example`; a custom
-connector URL is not required for the current wallet flow.
+![Strategy Studio](docs/assets/strategy-studio.png)
 
-## Hackathon walkthrough
+### Backtesting
 
-Quorumark serves strategy creators who need inspectable, versioned evidence and
-followers who want independent risk controls before acting on a signal. The
-creator flow is: authenticate with a NEAR wallet, create and configure a
-strategy, run the Python simulation engine, save a draft, create an immutable
-version, publish it, and optionally anchor its domain-separated commitment on
-NEAR testnet. The follower flow is: discover a published method, inspect its
-risk and evidence class, subscribe, configure limits, simulate a signal,
-inspect the paper execution, verify recomputed performance, and pause or
-cancel the subscription.
+The Python engine validates candle chronology and OHLCV integrity, then calculates deterministic paper results, fees, slippage, return, drawdown, and an equity curve. Offline runs can use clearly labeled fixtures. The public adapter uses Coinbase Exchange candles when configured and records its source and mapping. Results are simulations, not forecasts.
 
-AI analysis is an explicitly configured, schema-validated aid around strategy
-research and inspection; when unavailable, the product says so. Quorumark
-does not claim autonomous real-money trading or fabricated performance. The Python engine produces the genuine backtest and
-paper-execution results. Supabase stores authenticated identities, ownership,
-versions, subscriptions, and evidence with server-side authorization. NEAR
-Wallet Selector handles testnet authentication, and the narrow Rust contract
-stores only an immutable publication commitment—not strategy parameters or
-private logic.
+### Marketplace and versions
 
-Hosted publication and blockchain evidence are intentionally separate. A
-creator's wallet publishes the version to the marketplace; it never signs the
-owner-only `record_publication` contract call. The dedicated contract owner
-records pending commitments through the authorized operational signer, and the
-backend marks a version verified only after NEAR RPC confirms the signer,
-receiver, method arguments, and final receipt. Until then the product displays
-"verification pending" rather than opening an unauthorized wallet prompt.
+Published strategies are discoverable through `/marketplace` and detail routes. A version contains a validated executable specification and remains immutable after publication. Editing a published strategy creates a new version. Private definitions are not returned to unrelated followers.
 
-Evidence recording is creator-authorized: the authenticated creator's NEAR
-wallet signs the ordinary `record_publication` FunctionCall. No backend owner
-signer is exposed to the browser.
+![Marketplace](docs/assets/marketplace.png)
 
-Autonomous paper evaluation is a separate, paper-only service. Each published
-version is compiled into a small validated executable specification (symbol,
-candle interval, EMA entry/exit rule, and hard risk limits). An hourly GitHub
-Actions schedule calls the protected `POST /v1/internal/evaluations/run`
-endpoint with `QUORUMARK_EVALUATION_SCHEDULER_TOKEN`. Completed public candles
-are validated, evaluated once per strategy-version-observation, and any BUY or
-SELL signal is distributed only to active, version-pinned subscriptions. The
-existing follower risk engine then records accepted or rejected paper
-decisions with fees, slippage, and provenance. Configure the token as a GitHub
-Actions secret and apply `20261113100000_autonomous_evaluations.sql` plus
-`20261113110000_subscription_version_pinning.sql` to Supabase before calling
-this production-ready path. The Follower Desk labels fixture practice signals
-separately from autonomous market-data signals.
+### NEAR publication evidence
 
-For a credential-safe demo, use the public landing page, inspect the sample in
-Marketplace, run the Studio simulation, open Follower to apply risk controls,
-open Verification to recompute the ledger, then show Connect Wallet and the
-testnet-only evidence explanation. A real wallet signature and any contract
-deployment must be approved by the wallet owner; browser automation covers
-the UI and rejection paths but does not approve wallet prompts.
+The frontend prepares a `record_publication` FunctionCall through NEAR Wallet Selector. The creator's connected testnet account signs the ordinary transaction; the browser receives no private key. The backend confirms the finalized receipt, receiver, signer, method arguments, and commitment through RPC before showing verified status.
 
-## Live judge links and demo plan
+### Follower controls and paper execution
 
-- Web application: https://quorumark-web.onrender.com
-- Python service health: https://quorumark-api.onrender.com/health
-- Evidence contract: `quorumark-evidence-dedicated.testnet`
-- Contract deployment and initialization: `CeFAFZv19R9nUPrKWTdX5MVZ6M8kQTencHHNNeUEsfNY`
-- Confirmed publication evidence: `FJcHvD37RmFdoaJkiUmKAc1Pyj54X6L2ZPbJUE6427NC`
+Followers subscribe to a specific published version. Their policy is enforced server-side: approved assets, maximum trade, maximum position, maximum loss, pause state, fees, and slippage. A signal can be accepted or rejected by that policy. Accepted activity produces a deterministic paper receipt; no broker or real-money signer is called.
 
-For a two-to-three minute demonstration: open the landing page and Marketplace;
-enter Strategy Studio and describe a cautious Bitcoin method; show the AI
-proposal and its plain-English explanation; run the clearly labelled sample-data
-test; save and publish a version; open the Marketplace record; then switch to
-Follower Desk to set an independent paper-risk policy and inspect the decision
-history. Finish by showing the Verification page and, only with the creator's
-explicit wallet approval, the NEAR testnet publication transaction preview.
+![Follower/mobile view](docs/assets/follower-mobile.png)
 
-Screenshots used for the release walkthrough are in `artifacts/screenshots/`.
-They document the interface only and are not evidence of a completed wallet
-signature, AI provider call, historical return, or blockchain transaction.
+### Autonomous evaluation
 
-The release intentionally excludes live trading, real-money settlement,
-custody, recovery phrases, cross-chain settlement claims, and unsupported AI
-autonomy. The publication-evidence contract is deployed at
-`quorumark-evidence-dedicated.testnet`; the dedicated contract owner controls
-publication. The existing strategy commitment was confirmed on testnet in
-transaction `FJcHvD37RmFdoaJkiUmKAc1Pyj54X6L2ZPbJUE6427NC`.
+A protected hourly scheduler evaluates published executable versions against completed public candles. Evaluations are keyed by strategy, version, candle timestamp, and source, so retries skip an already processed observation. Signals go only to active, version-pinned subscriptions. Fixture practice signals are separate from autonomous market-data records.
+
+![NEAR evidence](docs/assets/banner-near.svg)
+
+## Why NEAR matters
+
+Quorumark commits a canonical, domain-separated publication record containing the strategy ID, immutable version ID, verified creator NEAR account, saved version content hash, saved backtest reference, and publication schema/network metadata.
+
+The SHA-256 commitment is passed to `record_publication` with `strategy_id` and `version_id`. The deployed contract stores one record per strategy/version key, binds the first record to the transaction signer, rejects a different commitment, and allows the original signer to retry the identical record. It stores no strategy parameters or private rules.
+
+The active contract is [quorumark-evidence-dedicated.testnet](https://testnet.nearblocks.io/address/quorumark-evidence-dedicated.testnet) on NEAR testnet. The repository records deployment/initialization as [CeFAFZv19R9nUPrKWTdX5MVZ6M8kQTencHHNNeUEsfNY](https://testnet.nearblocks.io/txns/CeFAFZv19R9nUPrKWTdX5MVZ6M8kQTencHHNNeUEsfNY) and the confirmed existing publication as [FJcHvD37RmFdoaJkiUmKAc1Pyj54X6L2ZPbJUE6427NC](https://testnet.nearblocks.io/txns/FJcHvD37RmFdoaJkiUmKAc1Pyj54X6L2ZPbJUE6427NC).
+
+![NEAR wallet authorization](docs/assets/near-wallet.png)
+
+When a strategy changes, its new version gets a different version ID and commitment. NEAR evidence shows what a signer committed for a specific version; it does not prove profitability, data quality, future performance, or paper-trade execution.
+
+## Architecture
+
+```mermaid
+flowchart TB
+  Browser[React + TanStack Start frontend]
+  Studio[Strategy Studio]
+  Wallet[NEAR Wallet Selector / Meteor]
+  API[FastAPI strategy service]
+  AI[Server-side AI provider abstraction]
+  Data[Coinbase public candles or labeled fixtures]
+  Engine[Validated backtest, risk, and paper engine]
+  DB[(Supabase hosted persistence)]
+  Contract[NEAR testnet evidence contract]
+  Scheduler[GitHub Actions hourly scheduler]
+  Browser --> Studio
+  Browser -->|authenticated requests| API
+  Studio --> API
+  Browser --> Wallet
+  Wallet -->|creator FunctionCall| Contract
+  API --> AI
+  API --> Data
+  API --> Engine
+  API --> DB
+  Scheduler -->|server-only token| API
+  API --> Contract
+  Contract -.->|commitment only| DB
+```
+
+Off-chain Supabase records contain strategies, versions, backtests, subscriptions, policies, evaluations, and evidence status. Local development also has an explicit SQLite adapter.
+
+## Technology stack
+
+| Technology | Purpose | Location |
+|---|---|---|
+| React 19 + TypeScript | Product UI | `src/` |
+| TanStack Start/Router | SSR-aware app and routes | `src/routes/` |
+| Vite 8 | Frontend build | `vite.config.ts` |
+| FastAPI + Pydantic | Protected APIs and validation | `backend/app/` |
+| Supabase/Postgres | Hosted persistence and RLS | `supabase/migrations/` |
+| SQLite | Local development ledger | `backend/app/repository.py` |
+| NEAR Wallet Selector | Testnet connection/signing | `src/lib/wallet/near.ts` |
+| Rust + near-sdk 5.17 | Evidence contract | `contracts/publication-evidence/` |
+| Coinbase public API | OHLCV adapter | `backend/app/historical_data.py` |
+| Vitest, pytest, Playwright | Automated tests | `tests/`, `backend/tests/` |
+
+![Try Quorumark](docs/assets/banner-try.svg)
+
+## Try Quorumark
+
+### Product walkthrough
+
+1. Open the [live application](https://quorumark-web.onrender.com). Observe the public landing page.
+2. Open Marketplace and select a published strategy. Observe its description, version, evidence class, limitations, and paper results. This demonstrates discovery without exposing private rules.
+3. Open Strategy Studio and describe a cautious Bitcoin strategy in ordinary English. Observe the AI proposal and provider/model provenance when AI credentials are configured.
+4. Review or refine the proposal, then run the clearly labeled sample-data backtest. Observe deterministic metrics and the data-source label.
+5. Connect a NEAR testnet wallet only when testing authentication or creator publication. Never enter a seed phrase or private key into Quorumark.
+6. Save a draft, create an immutable version, publish it, refresh, and confirm the marketplace record remains available.
+7. In Follower Desk, subscribe to a published version in the sandbox and configure approved assets, maximum trade, and maximum loss.
+8. Submit a supported paper signal or wait for autonomous evaluation. Observe policy acceptance/rejection and inspect the paper receipt/history.
+9. Open Verification to see recomputed paper-ledger results and NEAR evidence status.
+
+### NEAR verification walkthrough
+
+1. Use a NEAR testnet wallet account that is also the creator identity for the published version.
+2. Confirm receiver `quorumark-evidence-dedicated.testnet`, network testnet, method `record_publication`, deposit `0 NEAR`, and gas `30 Tgas`.
+3. Approve the ordinary FunctionCall. Quorumark does not request AddKey, FullAccess, deployment, or mainnet transactions for publication.
+4. Wait for finalization. The backend checks signer, receiver, arguments, IDs, and commitment through NEAR RPC before marking evidence confirmed.
+5. Inspect the [confirmed testnet transaction](https://testnet.nearblocks.io/txns/FJcHvD37RmFdoaJkiUmKAc1Pyj54X6L2ZPbJUE6427NC) and [contract account](https://testnet.nearblocks.io/address/quorumark-evidence-dedicated.testnet).
+
+A fresh wallet approval is a manual action; browser tests do not impersonate wallet approval.
 
 ## Local development
 
-```sh
+### Prerequisites
+
+Node.js compatible with the Vite/TanStack toolchain, Python 3.12 recommended for FastAPI, and Rust/Cargo plus the NEAR toolchain for contract work. A Supabase project and NEAR testnet wallet are optional.
+
+### Install and run
+
+```powershell
 npm ci
-npm run dev
+Copy-Item .env.example .env.local
+npm run dev:local
 ```
 
-Copy `.env.example` to `.env.local` and provide only the values required for the environment you are testing. Public `VITE_*` values are safe for the browser; session secrets, provider keys, service-role keys, and Intents credentials are server-side only. Never commit `.env`, `.env.local`, private keys, or credentials.
-
-Checks:
-
-```sh
-npx.cmd tsc --noEmit
-npm.cmd run lint
-npm.cmd test
-npm.cmd run build
-```
-
-The Python engine is a separate service:
+Manual backend:
 
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r backend\requirements.txt
 python -m uvicorn app.main:app --reload --app-dir backend --port 8000
+npm run dev
 ```
 
-Set `VITE_PYTHON_BACKEND_URL=http://127.0.0.1:8000` in `.env.local`, then start the frontend with `npm run dev`. Strategy Studio sends its validated candle fixture to the Python service and renders the returned metrics; it does not silently fall back to frontend-generated performance.
+Set `VITE_PYTHON_BACKEND_URL=http://127.0.0.1:8000`. `QUORUMARK_PYTHON_ENVIRONMENT=local` uses `backend/.data/quorumark.db`. Hosted Supabase mode requires server-only values in `.env.example` and applied migrations. Never commit environment files, provider keys, session secrets, or Supabase secret keys.
 
-For a clean Windows start with readiness checks, use `npm.cmd run dev:local`.
-For local hosted-Supabase persistence, use `npm.cmd run dev:hosted`. The launcher
-starts only missing services, checks both `/health` and the frontend, and writes
-sanitized process logs under the system temporary directory. It never prints
-provider keys or session secrets.
+### Environment variables
 
-## Public deployment preparation
+Public: `VITE_APP_URL`, `VITE_PYTHON_BACKEND_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_NEAR_NETWORK`, `VITE_NEAR_RPC_URL`, and `VITE_NEAR_EVIDENCE_CONTRACT_ID`.
 
-`render.yaml` defines the smallest free-tier deployment shape: one FastAPI web
-service and one TanStack/Vite Node web service. Render documents free web
-services and static sites, but free services can sleep and are intended for
-testing or hobby use, not production. Deployment still requires the repository
-owner to authorize a Render/GitHub connection and enter the server-only values
-in the dashboard. Set `VITE_PYTHON_BACKEND_URL` to the final HTTPS API URL and
-`QUORUMARK_ALLOWED_ORIGINS` to the final HTTPS frontend URL before testing.
+Server-only: `QUORUMARK_SUPABASE_SECRET_KEY`, `QUORUMARK_SESSION_SECRET`, `NEAR_AI_API_KEY` or `AI_API_KEY`, `QUORUMARK_EVALUATION_SCHEDULER_TOKEN`, and contract configuration. For NEAR AI Cloud use `AI_PROVIDER=near_ai`, `NEAR_AI_API_URL=https://cloud-api.near.ai/v1`, and a model returned by its catalog. Credentials never belong in `VITE_*` variables.
 
-Required server-only deployment values are `QUORUMARK_SUPABASE_SECRET_KEY`,
-`QUORUMARK_SESSION_SECRET`, and either `AI_API_KEY` for Gemini or
-`NEAR_AI_API_KEY` for NEAR AI. When using NEAR AI, set `AI_PROVIDER=near_ai`,
-`AI_MODEL` to a model returned by its catalog, and keep
-`NEAR_AI_API_URL=https://cloud-api.near.ai/v1`. Required public values include
-the Supabase URL and publishable key. Never put server-only values in a
-`VITE_*` variable or commit them.
+### Checks and build
 
-The Python service also owns follower paper decisions at `POST /v1/paper/executions`. It validates candle chronology and freshness, evaluates the follower's independent limits, applies paper fees and slippage, records an idempotency key, and returns a `paper_traded` evidence hash. The endpoint never calls a broker or signer.
+```powershell
+npx.cmd tsc --noEmit
+npm.cmd run lint
+npm.cmd test
+pytest -q backend/tests
+npm.cmd run build
+npm.cmd run verify:production
+```
 
-## Provenance
+Contract checks:
 
-This repository was reconstructed into a focused Quorumark application from an inherited codebase. Unrelated execution workers, mobile shells, social-growth modules, legacy deployment files, generated marketing assets, and their migrations were removed from the active tree. The retained application code and new Strategy Exchange vertical slice are maintained for the Quorumark hackathon; no inherited production service is used as a silent fallback.
+```powershell
+cd contracts/publication-evidence
+cargo test
+cargo build --target wasm32-unknown-unknown --release
+```
+
+Apply Supabase migrations to the intended project using the Supabase CLI or SQL editor; do not reset a hosted database.
+
+## Testing and verification
+
+Frontend tests cover wallet/provider selection, NEAR helpers, API behavior, and strategy exchange logic. Backend tests cover authorization, AI provider provenance, deterministic backtesting, historical-data validation, publication evidence, paper execution, security, and autonomous-evaluation idempotency. `tests/e2e/smoke.spec.ts` covers browser smoke routes and navigation.
+
+Automated tests do not approve Meteor Wallet prompts, fabricate provider responses, or claim a live transaction. Live AI, Supabase, wallet, Render, and NEAR checks require configured services and are reported separately.
+
+## Current limitations
+
+- All trading is paper/sandbox only. There is no brokerage, custody, or real-money execution.
+- Backtests use labeled fixtures or public historical candles and do not guarantee future performance.
+- NEAR integration is testnet evidence, not mainnet settlement or profitability verification.
+- The contract records a creator-signed, version-bound commitment and stores no private rules.
+- AI requires a valid server-side provider key, supported model, quota, and network access; unavailable AI is reported rather than fabricated.
+- Render free services can sleep or cold-start and require private dashboard configuration.
+- Wallet approval and fresh on-chain publication are manual human actions.
+- Autonomous evaluation requires its Supabase migrations, scheduler token, eligible published version, and accessible completed candles.
+- No `LICENSE` file is present, so the repository has no declared open-source license.
+
+## Repository structure
+
+```text
+src/                         React/TanStack application and routes
+src/components/exchange/     Studio, marketplace, follower UI
+src/lib/                     API, wallet, NEAR, strategy helpers
+backend/app/                 FastAPI, AI, data, backtest, paper engine
+backend/tests/               Python API and engine tests
+contracts/publication-evidence/ Rust NEAR contract and tests
+supabase/migrations/         Hosted schema and RLS migrations
+tests/e2e/                   Playwright smoke tests
+docs/                        NEAR/manual verification notes
+docs/assets/                 Selected README screenshots
+scripts/                     Local launcher, Render adapter, asset checks
+render.yaml                  Free Render frontend/backend blueprint
+```
+
+## NEAR Hackathon submission
+
+Quorumark is a NEAR Hackathon submission. NEAR contributes wallet identity and independently inspectable testnet evidence for immutable strategy versions. AI, data, backtesting, subscriptions, and paper execution remain off-chain; only the publication commitment is recorded on-chain.
+
+Judges can start with the live links, follow the walkthrough, inspect the contract account and confirmed transaction, and run local checks. Evidence links are testnet links and are not mainnet or profitability claims.
+
+## License
+
+No `LICENSE` file is present in this repository. The project is not published under a declared open-source license.

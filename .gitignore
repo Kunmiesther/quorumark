@@ -58,6 +58,19 @@ test-results/
 backend/backend/
 backend/.pytest-release-tmp/
 
+# Rendered demo-film outputs are local deliverables, not repository source.
+video-production/output/
+video-production/contact-list.txt
+video-production/*.out
+video-production/*.err
+video-production/rebuild/output/
+video-production/rebuild/contact-list.txt
+video-production/final-film/output/
+video-production/final-film/contact-list.txt
+.pytest-tmp/
+video-reference.mp4
+quorumark_voiceover_approved.md
+
 # Supabase CLI local link and runtime metadata
 supabase/.temp/
 .vercel
